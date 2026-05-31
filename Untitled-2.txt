@@ -1,0 +1,28 @@
+def evaluar_candidato():
+    tiro_penal = int(input("¿Cuántos goles anotó al lanzar 25 tiros penales? "))
+    alta_resistencia = int(input("¿Cuántas vueltas dio a la cancha en 10 minutos? "))
+    buen_sprint = int(input("¿Cuál fue su marca en segundos en la prueba de 100m planos? "))
+
+    certeza = 0.0
+
+    if tiro_penal >= 15 and alta_resistencia >= 4:
+        certeza += 0.8
+    if tiro_penal >= 15 and buen_sprint <= 15:
+        certeza += 0.9
+    if alta_resistencia >= 4 and buen_sprint <= 15:
+        certeza += 0.75
+
+    if certeza > 0:
+        print(f"El candidato es adecuado para el equipo con certeza {certeza}.")
+    else:
+        print("El candidato es adecuado para el equipo con certeza 0.0.")
+
+# Evaluación del primer candidato
+evaluar_candidato()
+
+while True:
+    nuevo_candidato = input("¿Desea evaluar a otro candidato? (s/n): ")
+    if nuevo_candidato.lower() != 's':
+        break
+    else:
+        evaluar_candidato()
