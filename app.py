@@ -55,6 +55,44 @@ def leer_archivo(archivo):
         st.error("Formato no permitido. Sube CSV o Excel .xlsx")
         return None
 
+def emoji_ranking(posicion):
+    if posicion == 1:
+        return "🥇"
+    elif posicion == 2:
+        return "🥈"
+    elif posicion == 3:
+        return "🥉"
+    elif posicion in [4, 5]:
+        return "🏅"
+    elif posicion <= 10:
+        return "🎖️"
+    elif posicion <= 13:
+        return "📈"
+    else:
+        return "📊"
+
+def distincion(posicion):
+    if posicion == 1:
+        return "🥇 TOP 1 - Excelente trabajo"
+    elif posicion == 2:
+        return "🥈 TOP 2 - Muy buen avance"
+    elif posicion == 3:
+        return "🥉 TOP 3 - Gran desempeño"
+    elif posicion in [4, 5]:
+        return "🏆 TOP 5 - Dentro de los mejores socios"
+    return ""
+
+def mensaje_motivador(posicion):
+    if posicion == 1:
+        return "👏 Felicidades, estás liderando el ranking. Sigue así."
+    elif posicion == 2:
+        return "👏 Excelente avance, estás entre los mejores."
+    elif posicion == 3:
+        return "👏 Gran desempeño, mantén el ritmo."
+    elif posicion in [4, 5]:
+        return "👏 Muy buen trabajo, estás dentro del Top 5."
+    return "💪 Sigamos avanzando hacia el objetivo del mes."
+
 archivo = st.file_uploader("📤 Sube el archivo GrossAdd", type=["csv", "xlsx"])
 
 df = None
@@ -112,16 +150,20 @@ if archivo:
                     resumen["OBJETIVO"] - resumen["Ventas"]
                 ).clip(lower=0).astype(int)
 
-                resumen = resumen.sort_values("CUMPLIMIENTO", ascending=False)
+                resumen = resumen.sort_values("Ventas", ascending=False).reset_index(drop=True)
+                resumen["POSICION"] = resumen.index + 1
+                resumen["EMOJI"] = resumen["POSICION"].apply(emoji_ranking)
+                resumen["DISTINCION"] = resumen["POSICION"].apply(distincion)
 
     except Exception as e:
         st.error(f"Error al procesar archivo: {e}")
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Dashboard",
     "🏆 Ranking",
     "🎯 Objetivos",
-    "📱 WhatsApp"
+    "📱 WhatsApp",
+    "🏆 Ranking WhatsApp"
 ])
 
 with tab1:
@@ -155,7 +197,7 @@ with tab1:
 
         st.subheader("🏅 Top 5 Socios")
         st.dataframe(
-            resumen.head(5)[["VENDEDOR_NOMBRE", "Ventas", "OBJETIVO", "CUMPLIMIENTO", "FALTAN"]],
+            resumen.head(5)[["EMOJI", "POSICION", "VENDEDOR_NOMBRE", "Ventas", "OBJETIVO", "CUMPLIMIENTO", "DISTINCION"]],
             use_container_width=True,
             hide_index=True
         )
@@ -168,12 +210,15 @@ with tab2:
     if resumen is not None:
         st.dataframe(
             resumen[[
+                "EMOJI",
+                "POSICION",
                 "VENDEDOR_EH",
                 "VENDEDOR_NOMBRE",
                 "Ventas",
                 "OBJETIVO",
                 "CUMPLIMIENTO",
-                "FALTAN"
+                "FALTAN",
+                "DISTINCION"
             ]],
             use_container_width=True,
             hide_index=True
@@ -251,14 +296,23 @@ with tab4:
             socio = st.selectbox("Selecciona socio", resumen["VENDEDOR_NOMBRE"])
             fila = resumen[resumen["VENDEDOR_NOMBRE"] == socio].iloc[0]
 
-            texto = (
-                f"📊 AVANCE DE VENTAS\n\n"
+            posicion = int(fila["POSICION"])
+            dist = fila["DISTINCION"]
+            motivador = mensaje_motivador(posicion)
+
+            texto = "📊 AVANCE DE VENTAS\n\n"
+
+            if dist:
+                texto += f"{dist}\n\n"
+
+            texto += (
                 f"👤 {fila['VENDEDOR_NOMBRE']}\n"
                 f"EH: {fila['VENDEDOR_EH']}\n\n"
                 f"✅ Ventas: {fila['Ventas']}\n"
                 f"🎯 Objetivo: {fila['OBJETIVO']}\n"
                 f"📈 Cumplimiento: {fila['CUMPLIMIENTO']}%\n"
-                f"⏳ Faltan: {fila['FALTAN']}\n"
+                f"⏳ Faltan: {fila['FALTAN']}\n\n"
+                f"{motivador}\n"
             )
 
             if opcion == "Seguimiento individual con códigos":
@@ -283,7 +337,7 @@ with tab4:
 
             for _, row in resumen.iterrows():
                 texto += (
-                    f"👤 {row['VENDEDOR_NOMBRE']}\n"
+                    f"{row['EMOJI']} {int(row['POSICION'])}° {row['VENDEDOR_NOMBRE']}\n"
                     f"✅ {row['Ventas']} / 🎯 {row['OBJETIVO']}\n"
                     f"📈 {row['CUMPLIMIENTO']}% | Faltan: {row['FALTAN']}\n"
                     "----------------------\n"
@@ -297,4 +351,27 @@ with tab4:
             )
     else:
         st.info("Primero sube el archivo GrossAdd.")
+
+with tab5:
+    st.subheader("🏆 Ranking completo para WhatsApp")
+
+    if resumen is not None:
+        texto_ranking = "🏆 *RANKING DE VENTAS*\n\n"
+
+        for _, row in resumen.iterrows():
+            texto_ranking += (
+                f"{row['EMOJI']} *{int(row['POSICION'])}° {row['VENDEDOR_NOMBRE']}* — {row['Ventas']} ventas\n\n"
+            )
+
+        texto_ranking += f"✅ *Total general: {int(resumen['Ventas'].sum())} ventas*"
+
+        st.text_area("Ranking listo para copiar", texto_ranking, height=500)
+
+        st.link_button(
+            "📲 Compartir ranking por WhatsApp",
+            "https://wa.me/?text=" + urllib.parse.quote(texto_ranking)
+        )
+    else:
+        st.info("Primero sube el archivo GrossAdd.")
+
 
