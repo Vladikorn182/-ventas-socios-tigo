@@ -709,7 +709,7 @@ with tab6:
 with tab7:
     st.subheader("📋 Pendientes de Instalación")
 
-    st.write("Sube el archivo diario de pendientes para separarlo por socio y generar mensajes para WhatsApp.")
+    st.write("Sube el archivo diario de pendientes para separarlo por socio y generar mensajes rápidos para WhatsApp.")
 
     archivo_pendientes = st.file_uploader(
         "📤 Sube archivo Pendientes de Instalación",
@@ -731,9 +731,7 @@ with tab7:
                 columnas_pendientes = [
                     "CLIENTE_NRO",
                     "FECHA_REPORTE",
-                    "VENDEDOR_EH",
-                    "CLIENTE_NOMBRE",
-                    "CLIENTE_TELEFONO1"
+                    "VENDEDOR_EH"
                 ]
 
                 faltantes_pendientes = [
@@ -747,25 +745,7 @@ with tab7:
                 else:
                     pendientes["VENDEDOR_EH"] = pendientes["VENDEDOR_EH"].astype(str)
 
-                    st.subheader("📊 Resumen de Pendientes")
-
-                    total_pendientes = len(pendientes)
-                    socios_pendientes = pendientes["VENDEDOR_EH"].nunique()
-
-                    c1, c2 = st.columns(2)
-                    c1.metric("📋 Total pendientes", total_pendientes)
-                    c2.metric("👥 Socios con pendientes", socios_pendientes)
-
-                    resumen_pendientes = (
-                        pendientes.groupby("VENDEDOR_EH")
-                        .agg(
-                            Pendientes=("CLIENTE_NRO", "count")
-                        )
-                        .reset_index()
-                        .sort_values("Pendientes", ascending=False)
-                    )
-
-                    # Si el GrossAdd está cargado, jalamos nombres de socios desde ahí.
+                    # Base de socios tomada del GrossAdd si está cargado
                     if df is not None and "VENDEDOR_EH" in df.columns and "VENDEDOR_NOMBRE" in df.columns:
                         socios_base = (
                             df[["VENDEDOR_EH", "VENDEDOR_NOMBRE"]]
@@ -774,49 +754,51 @@ with tab7:
                         )
                         socios_base["VENDEDOR_EH"] = socios_base["VENDEDOR_EH"].astype(str)
 
-                        resumen_pendientes = resumen_pendientes.merge(
+                        pendientes = pendientes.merge(
                             socios_base,
                             on="VENDEDOR_EH",
                             how="left"
                         )
                     else:
-                        resumen_pendientes["VENDEDOR_NOMBRE"] = ""
+                        pendientes["VENDEDOR_NOMBRE"] = ""
+
+                    pendientes["SOCIO"] = pendientes.apply(
+                        lambda x: f"{x['VENDEDOR_EH']} - {x['VENDEDOR_NOMBRE']}"
+                        if str(x["VENDEDOR_NOMBRE"]).strip() not in ["", "nan", "None"]
+                        else str(x["VENDEDOR_EH"]),
+                        axis=1
+                    )
+
+                    st.subheader("📊 Resumen por Socio")
+
+                    resumen_pendientes = (
+                        pendientes.groupby(["VENDEDOR_EH", "VENDEDOR_NOMBRE", "SOCIO"])
+                        .agg(Pendientes=("CLIENTE_NRO", "count"))
+                        .reset_index()
+                        .sort_values("Pendientes", ascending=False)
+                    )
 
                     st.dataframe(
-                        resumen_pendientes[[
-                            "VENDEDOR_EH",
-                            "VENDEDOR_NOMBRE",
-                            "Pendientes"
-                        ]],
+                        resumen_pendientes[["SOCIO", "Pendientes"]],
                         use_container_width=True,
                         hide_index=True
                     )
 
-                    st.subheader("🔎 Filtrar por socio")
-
-                    lista_socios = resumen_pendientes.copy()
-                    lista_socios["SOCIO_DISPLAY"] = lista_socios.apply(
-                        lambda x: f"{x['VENDEDOR_EH']} - {x['VENDEDOR_NOMBRE']}" if str(x["VENDEDOR_NOMBRE"]) != "nan" and str(x["VENDEDOR_NOMBRE"]).strip() != "" else str(x["VENDEDOR_EH"]),
-                        axis=1
-                    )
+                    st.subheader("📱 WhatsApp por Socio")
 
                     socio_sel = st.selectbox(
                         "Selecciona socio",
-                        lista_socios["SOCIO_DISPLAY"]
+                        resumen_pendientes["SOCIO"]
                     )
 
-                    eh_sel = socio_sel.split(" - ")[0]
-
                     detalle_pendientes = pendientes[
-                        pendientes["VENDEDOR_EH"] == eh_sel
+                        pendientes["SOCIO"] == socio_sel
                     ][[
                         "CLIENTE_NRO",
                         "FECHA_REPORTE",
-                        "CLIENTE_NOMBRE",
-                        "CLIENTE_TELEFONO1"
+                        "VENDEDOR_EH",
+                        "VENDEDOR_NOMBRE"
                     ]]
-
-                    st.subheader("📋 Detalle de pendientes por socio")
 
                     st.dataframe(
                         detalle_pendientes,
@@ -824,13 +806,8 @@ with tab7:
                         hide_index=True
                     )
 
-                    nombre_socio = ""
-                    if df is not None and "VENDEDOR_EH" in df.columns and "VENDEDOR_NOMBRE" in df.columns:
-                        match = df[df["VENDEDOR_EH"].astype(str) == eh_sel]
-                        if len(match) > 0:
-                            nombre_socio = str(match.iloc[0]["VENDEDOR_NOMBRE"])
-
-                    st.subheader("📱 WhatsApp Pendientes")
+                    eh_sel = str(detalle_pendientes.iloc[0]["VENDEDOR_EH"]) if len(detalle_pendientes) > 0 else ""
+                    nombre_socio = str(detalle_pendientes.iloc[0]["VENDEDOR_NOMBRE"]) if len(detalle_pendientes) > 0 else ""
 
                     texto_pendientes = "📋 PENDIENTES DE INSTALACIÓN\n\n"
                     texto_pendientes += f"👤 Socio: {nombre_socio}\n"
@@ -839,9 +816,8 @@ with tab7:
 
                     for _, row in detalle_pendientes.iterrows():
                         texto_pendientes += (
-                            f"🔹 {row['CLIENTE_NRO']} | {row['CLIENTE_NOMBRE']}\n"
-                            f"📅 Reporte: {row['FECHA_REPORTE']}\n"
-                            f"📞 Tel: {row['CLIENTE_TELEFONO1']}\n\n"
+                            f"🔹 Código: {row['CLIENTE_NRO']}\n"
+                            f"📅 Generado: {row['FECHA_REPORTE']}\n\n"
                         )
 
                     st.text_area(
@@ -855,14 +831,13 @@ with tab7:
                         "https://wa.me/?text=" + urllib.parse.quote(texto_pendientes)
                     )
 
-                    st.subheader("📱 Reporte general de pendientes")
+                    st.subheader("📱 Resumen General para WhatsApp")
 
                     texto_general_pendientes = "📋 RESUMEN GENERAL DE PENDIENTES\n\n"
 
                     for _, row in resumen_pendientes.iterrows():
                         texto_general_pendientes += (
-                            f"👤 {row['VENDEDOR_NOMBRE']}\n"
-                            f"EH: {row['VENDEDOR_EH']}\n"
+                            f"👤 {row['SOCIO']}\n"
                             f"📌 Pendientes: {row['Pendientes']}\n"
                             "----------------------\n"
                         )
