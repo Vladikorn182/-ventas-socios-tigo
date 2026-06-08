@@ -27,7 +27,7 @@ st.markdown("""
 <div class="tigo-header">
     <div class="tigo-logo">TIGO</div>
     <h2>📊 Dashboard de Ventas Socios</h2>
-    <p>Seguimiento de objetivos, cumplimiento, crosselling y reportes para WhatsApp</p>
+    <p>Seguimiento de objetivos, crosselling, agenda técnica y reportes para WhatsApp</p>
     <hr style="border:1px solid rgba(255,255,255,0.2);">
     <p style="font-size:13px;">👨‍💻 Desarrollado por Vladimir Cuenca López</p>
 </div>
@@ -56,7 +56,6 @@ CREATE TABLE IF NOT EXISTS configuracion (
 
 conn.commit()
 
-# Valor inicial de referencia, editable desde la aplicación
 cursor.execute("""
 INSERT OR IGNORE INTO configuracion (CLAVE, VALOR)
 VALUES ('codigo_minimo_objetivo', '2671392')
@@ -76,6 +75,15 @@ def leer_archivo(archivo):
     else:
         st.error("Formato no permitido. Sube CSV o Excel .xlsx")
         return None
+
+
+def normalizar_columnas(df):
+    df = df.copy()
+    df.columns = [
+        str(c).strip().lower().replace(" ", "_")
+        for c in df.columns
+    ]
+    return df
 
 
 def obtener_codigo_minimo():
@@ -139,7 +147,7 @@ def mensaje_motivador(posicion):
 
 
 # =========================
-# CARGA DE ARCHIVO
+# CARGA DE GROSSADD
 # =========================
 codigo_minimo_objetivo = obtener_codigo_minimo()
 
@@ -158,7 +166,7 @@ if archivo:
         df = leer_archivo(archivo)
 
         if df is not None:
-            st.success(f"Archivo cargado: {len(df)} registros")
+            st.success(f"Archivo GrossAdd cargado: {len(df)} registros")
 
             columnas_requeridas = [
                 "VENDEDOR_EH",
@@ -171,9 +179,8 @@ if archivo:
             faltantes = [c for c in columnas_requeridas if c not in df.columns]
 
             if faltantes:
-                st.error(f"Faltan columnas en el archivo: {faltantes}")
+                st.error(f"Faltan columnas en el GrossAdd: {faltantes}")
             else:
-                # Convertir código cliente a número para separar venta objetivo y crosselling
                 df["CLIENTE_NRO_NUM"] = pd.to_numeric(
                     df["CLIENTE_NRO"],
                     errors="coerce"
@@ -226,18 +233,19 @@ if archivo:
                 resumen["DISTINCION"] = resumen["POSICION"].apply(obtener_distincion)
 
     except Exception as e:
-        st.error(f"Error al procesar archivo: {e}")
+        st.error(f"Error al procesar GrossAdd: {e}")
 
 
 # =========================
 # PESTAÑAS
 # =========================
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📊 Dashboard",
     "🏆 Ranking",
     "🎯 Objetivos",
     "⚙️ Configuración",
-    "📱 WhatsApp"
+    "📱 WhatsApp",
+    "🗺️ Agenda Técnica"
 ])
 
 
@@ -499,3 +507,185 @@ with tab5:
             )
     else:
         st.info("Primero sube el archivo GrossAdd.")
+
+
+# =========================
+# AGENDA TÉCNICA
+# =========================
+with tab6:
+    st.subheader("🗺️ Agenda Técnica")
+
+    st.write("Sube el archivo diario de agenda técnica para ver instalaciones, supervisiones, contratistas, turnos y mapa.")
+
+    archivo_agenda = st.file_uploader(
+        "📤 Sube archivo Agenda Técnica",
+        type=["csv", "xlsx"],
+        key="agenda_tecnica"
+    )
+
+    agenda = None
+
+    if archivo_agenda:
+        try:
+            agenda = leer_archivo(archivo_agenda)
+
+            if agenda is not None:
+                agenda = normalizar_columnas(agenda)
+
+                st.success(f"Archivo de agenda cargado: {len(agenda)} registros")
+
+                columnas_agenda = [
+                    "cliente_nro",
+                    "estado",
+                    "contratista",
+                    "tipo_trabajo",
+                    "turno_agendamiento",
+                    "dato_conexion",
+                    "latitud",
+                    "longitud"
+                ]
+
+                faltantes_agenda = [c for c in columnas_agenda if c not in agenda.columns]
+
+                if faltantes_agenda:
+                    st.error(f"Faltan columnas en agenda técnica: {faltantes_agenda}")
+                    st.write("Columnas detectadas:")
+                    st.write(list(agenda.columns))
+                else:
+                    agenda["latitud"] = pd.to_numeric(agenda["latitud"], errors="coerce")
+                    agenda["longitud"] = pd.to_numeric(agenda["longitud"], errors="coerce")
+
+                    total_agenda = len(agenda)
+                    total_instalacion = len(agenda[agenda["tipo_trabajo"].astype(str).str.lower().str.contains("instalacion", na=False)])
+                    total_supervision = len(agenda[agenda["tipo_trabajo"].astype(str).str.lower().str.contains("supervision", na=False)])
+                    contratistas = agenda["contratista"].nunique()
+                    turnos = agenda["turno_agendamiento"].nunique()
+
+                    c1, c2, c3, c4, c5 = st.columns(5)
+                    c1.metric("📋 Total agenda", total_agenda)
+                    c2.metric("🛠️ Instalaciones", total_instalacion)
+                    c3.metric("🔍 Supervisiones", total_supervision)
+                    c4.metric("👷 Contratistas", contratistas)
+                    c5.metric("🕒 Turnos", turnos)
+
+                    st.divider()
+
+                    col1, col2, col3 = st.columns(3)
+
+                    with col1:
+                        filtro_contratista = st.selectbox(
+                            "Filtrar por contratista",
+                            ["Todos"] + sorted(agenda["contratista"].dropna().astype(str).unique().tolist())
+                        )
+
+                    with col2:
+                        filtro_tipo = st.selectbox(
+                            "Filtrar por tipo de trabajo",
+                            ["Todos"] + sorted(agenda["tipo_trabajo"].dropna().astype(str).unique().tolist())
+                        )
+
+                    with col3:
+                        filtro_turno = st.selectbox(
+                            "Filtrar por turno",
+                            ["Todos"] + sorted(agenda["turno_agendamiento"].dropna().astype(str).unique().tolist())
+                        )
+
+                    agenda_filtrada = agenda.copy()
+
+                    if filtro_contratista != "Todos":
+                        agenda_filtrada = agenda_filtrada[
+                            agenda_filtrada["contratista"].astype(str) == filtro_contratista
+                        ]
+
+                    if filtro_tipo != "Todos":
+                        agenda_filtrada = agenda_filtrada[
+                            agenda_filtrada["tipo_trabajo"].astype(str) == filtro_tipo
+                        ]
+
+                    if filtro_turno != "Todos":
+                        agenda_filtrada = agenda_filtrada[
+                            agenda_filtrada["turno_agendamiento"].astype(str) == filtro_turno
+                        ]
+
+                    st.subheader("🔎 Buscar por código cliente")
+
+                    codigo_busqueda = st.text_input("Ingrese código cliente")
+
+                    if codigo_busqueda:
+                        resultado = agenda[
+                            agenda["cliente_nro"].astype(str).str.contains(codigo_busqueda, na=False)
+                        ]
+
+                        if len(resultado) > 0:
+                            st.dataframe(resultado, use_container_width=True, hide_index=True)
+                        else:
+                            st.warning("No se encontró el código en la agenda.")
+
+                    st.subheader("🗺️ Mapa de agenda técnica")
+
+                    agenda_mapa = agenda_filtrada.dropna(subset=["latitud", "longitud"]).copy()
+
+                    if len(agenda_mapa) > 0:
+                        mapa = agenda_mapa.rename(columns={"latitud": "lat", "longitud": "lon"})
+                        st.map(mapa[["lat", "lon"]])
+                    else:
+                        st.warning("No hay coordenadas válidas para mostrar en el mapa.")
+
+                    st.subheader("📊 Resumen por contratista")
+
+                    resumen_contratista = (
+                        agenda_filtrada.groupby("contratista")
+                        .agg(
+                            Total=("cliente_nro", "count"),
+                            Instalaciones=("tipo_trabajo", lambda x: x.astype(str).str.lower().str.contains("instalacion", na=False).sum()),
+                            Supervisiones=("tipo_trabajo", lambda x: x.astype(str).str.lower().str.contains("supervision", na=False).sum())
+                        )
+                        .reset_index()
+                        .sort_values("Total", ascending=False)
+                    )
+
+                    st.dataframe(resumen_contratista, use_container_width=True, hide_index=True)
+
+                    st.subheader("📋 Detalle de agenda")
+
+                    columnas_vista = [
+                        "cliente_nro",
+                        "estado",
+                        "contratista",
+                        "tipo_trabajo",
+                        "turno_agendamiento",
+                        "dato_conexion",
+                        "latitud",
+                        "longitud"
+                    ]
+
+                    st.dataframe(
+                        agenda_filtrada[columnas_vista],
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+                    st.subheader("📱 Reporte WhatsApp Agenda Técnica")
+
+                    texto_agenda = "🗺️ AGENDA TÉCNICA DEL DÍA\n\n"
+
+                    for contratista, grupo in agenda_filtrada.groupby("contratista"):
+                        texto_agenda += f"👷 Contratista: {contratista}\n"
+                        texto_agenda += f"📋 Total: {len(grupo)}\n\n"
+
+                        for _, row in grupo.iterrows():
+                            texto_agenda += (
+                                f"🔹 {row['cliente_nro']} | {row['tipo_trabajo']} | {row['estado']} | {row['turno_agendamiento']}\n"
+                            )
+
+                        texto_agenda += "----------------------\n"
+
+                    st.text_area("Mensaje agenda técnica", texto_agenda, height=420)
+
+                    st.link_button(
+                        "📲 Compartir agenda por WhatsApp",
+                        "https://wa.me/?text=" + urllib.parse.quote(texto_agenda)
+                    )
+
+        except Exception as e:
+            st.error(f"Error al procesar agenda técnica: {e}")
