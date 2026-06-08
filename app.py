@@ -55,7 +55,7 @@ def leer_archivo(archivo):
         st.error("Formato no permitido. Sube CSV o Excel .xlsx")
         return None
 
-def emoji_ranking(posicion):
+def obtener_medalla(posicion):
     if posicion == 1:
         return "🥇"
     elif posicion == 2:
@@ -63,15 +63,10 @@ def emoji_ranking(posicion):
     elif posicion == 3:
         return "🥉"
     elif posicion in [4, 5]:
-        return "🏅"
-    elif posicion <= 10:
-        return "🎖️"
-    elif posicion <= 13:
-        return "📈"
-    else:
-        return "📊"
+        return "🏆"
+    return "📊"
 
-def distincion(posicion):
+def obtener_distincion(posicion):
     if posicion == 1:
         return "🥇 TOP 1 - Excelente trabajo"
     elif posicion == 2:
@@ -109,7 +104,8 @@ if archivo:
                 "VENDEDOR_EH",
                 "VENDEDOR_NOMBRE",
                 "CLIENTE_NRO",
-                "FECHA_INSTALACION"
+                "FECHA_INSTALACION",
+                "CLIENTE_NOMBRE"
             ]
 
             faltantes = [c for c in columnas_requeridas if c not in df.columns]
@@ -152,18 +148,17 @@ if archivo:
 
                 resumen = resumen.sort_values("Ventas", ascending=False).reset_index(drop=True)
                 resumen["POSICION"] = resumen.index + 1
-                resumen["EMOJI"] = resumen["POSICION"].apply(emoji_ranking)
-                resumen["DISTINCION"] = resumen["POSICION"].apply(distincion)
+                resumen["MEDALLA"] = resumen["POSICION"].apply(obtener_medalla)
+                resumen["DISTINCION"] = resumen["POSICION"].apply(obtener_distincion)
 
     except Exception as e:
         st.error(f"Error al procesar archivo: {e}")
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Dashboard",
     "🏆 Ranking",
     "🎯 Objetivos",
-    "📱 WhatsApp",
-    "🏆 Ranking WhatsApp"
+    "📱 WhatsApp"
 ])
 
 with tab1:
@@ -197,7 +192,7 @@ with tab1:
 
         st.subheader("🏅 Top 5 Socios")
         st.dataframe(
-            resumen.head(5)[["EMOJI", "POSICION", "VENDEDOR_NOMBRE", "Ventas", "OBJETIVO", "CUMPLIMIENTO", "DISTINCION"]],
+            resumen.head(5)[["MEDALLA", "POSICION", "VENDEDOR_NOMBRE", "Ventas", "OBJETIVO", "CUMPLIMIENTO", "FALTAN"]],
             use_container_width=True,
             hide_index=True
         )
@@ -210,15 +205,14 @@ with tab2:
     if resumen is not None:
         st.dataframe(
             resumen[[
-                "EMOJI",
+                "MEDALLA",
                 "POSICION",
                 "VENDEDOR_EH",
                 "VENDEDOR_NOMBRE",
                 "Ventas",
                 "OBJETIVO",
                 "CUMPLIMIENTO",
-                "FALTAN",
-                "DISTINCION"
+                "FALTAN"
             ]],
             use_container_width=True,
             hide_index=True
@@ -296,8 +290,8 @@ with tab4:
             socio = st.selectbox("Selecciona socio", resumen["VENDEDOR_NOMBRE"])
             fila = resumen[resumen["VENDEDOR_NOMBRE"] == socio].iloc[0]
 
-            posicion = int(fila["POSICION"])
-            dist = fila["DISTINCION"]
+            posicion = int(fila["POSICION"]) if "POSICION" in fila else 0
+            dist = obtener_distincion(posicion)
             motivador = mensaje_motivador(posicion)
 
             texto = "📊 AVANCE DE VENTAS\n\n"
@@ -318,12 +312,12 @@ with tab4:
             if opcion == "Seguimiento individual con códigos":
                 detalle = df[
                     df["VENDEDOR_NOMBRE"] == fila["VENDEDOR_NOMBRE"]
-                ][["CLIENTE_NRO", "FECHA_INSTALACION"]]
+                ][["CLIENTE_NRO", "CLIENTE_NOMBRE", "FECHA_INSTALACION"]]
 
                 texto += "\n📋 CÓDIGOS PARA SEGUIMIENTO:\n\n"
 
                 for _, venta in detalle.iterrows():
-                    texto += f"🔹 {venta['CLIENTE_NRO']} | {venta['FECHA_INSTALACION']}\n"
+                    texto += f"🔹 {venta['CLIENTE_NRO']} | {venta['CLIENTE_NOMBRE']} | {venta['FECHA_INSTALACION']}\n"
 
             st.text_area("Mensaje", texto, height=450)
 
@@ -336,8 +330,9 @@ with tab4:
             texto = "📊 AVANCE GENERAL DE VENTAS\n\n"
 
             for _, row in resumen.iterrows():
+                medalla = row["MEDALLA"] if "MEDALLA" in row else "📊"
                 texto += (
-                    f"{row['EMOJI']} {int(row['POSICION'])}° {row['VENDEDOR_NOMBRE']}\n"
+                    f"{medalla} {row['VENDEDOR_NOMBRE']}\n"
                     f"✅ {row['Ventas']} / 🎯 {row['OBJETIVO']}\n"
                     f"📈 {row['CUMPLIMIENTO']}% | Faltan: {row['FALTAN']}\n"
                     "----------------------\n"
@@ -351,27 +346,3 @@ with tab4:
             )
     else:
         st.info("Primero sube el archivo GrossAdd.")
-
-with tab5:
-    st.subheader("🏆 Ranking completo para WhatsApp")
-
-    if resumen is not None:
-        texto_ranking = "🏆 *RANKING DE VENTAS*\n\n"
-
-        for _, row in resumen.iterrows():
-            texto_ranking += (
-                f"{row['EMOJI']} *{int(row['POSICION'])}° {row['VENDEDOR_NOMBRE']}* — {row['Ventas']} ventas\n\n"
-            )
-
-        texto_ranking += f"✅ *Total general: {int(resumen['Ventas'].sum())} ventas*"
-
-        st.text_area("Ranking listo para copiar", texto_ranking, height=500)
-
-        st.link_button(
-            "📲 Compartir ranking por WhatsApp",
-            "https://wa.me/?text=" + urllib.parse.quote(texto_ranking)
-        )
-    else:
-        st.info("Primero sube el archivo GrossAdd.")
-
-
