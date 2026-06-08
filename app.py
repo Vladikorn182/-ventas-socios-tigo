@@ -27,7 +27,7 @@ st.markdown("""
 <div class="tigo-header">
     <div class="tigo-logo">TIGO</div>
     <h2>📊 Dashboard de Ventas Socios</h2>
-    <p>Seguimiento de objetivos, crosselling, agenda técnica y reportes para WhatsApp</p>
+    <p>Seguimiento de objetivos, crosselling, agenda técnica, pendientes y reportes para WhatsApp</p>
     <hr style="border:1px solid rgba(255,255,255,0.2);">
     <p style="font-size:13px;">👨‍💻 Desarrollado por Vladimir Cuenca López</p>
 </div>
@@ -78,6 +78,15 @@ def leer_archivo(archivo):
 
 
 def normalizar_columnas(df):
+    df = df.copy()
+    df.columns = [
+        str(c).strip().upper().replace(" ", "_")
+        for c in df.columns
+    ]
+    return df
+
+
+def normalizar_columnas_lower(df):
     df = df.copy()
     df.columns = [
         str(c).strip().lower().replace(" ", "_")
@@ -239,13 +248,14 @@ if archivo:
 # =========================
 # PESTAÑAS
 # =========================
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📊 Dashboard",
     "🏆 Ranking",
     "🎯 Objetivos",
     "⚙️ Configuración",
     "📱 WhatsApp",
-    "🗺️ Agenda Técnica"
+    "🗺️ Agenda Técnica",
+    "📋 Pendientes"
 ])
 
 
@@ -530,7 +540,7 @@ with tab6:
             agenda = leer_archivo(archivo_agenda)
 
             if agenda is not None:
-                agenda = normalizar_columnas(agenda)
+                agenda = normalizar_columnas_lower(agenda)
 
                 st.success(f"Archivo de agenda cargado: {len(agenda)} registros")
 
@@ -691,3 +701,182 @@ with tab6:
 
         except Exception as e:
             st.error(f"Error al procesar agenda técnica: {e}")
+
+
+# =========================
+# PENDIENTES DE INSTALACIÓN
+# =========================
+with tab7:
+    st.subheader("📋 Pendientes de Instalación")
+
+    st.write("Sube el archivo diario de pendientes para separarlo por socio y generar mensajes para WhatsApp.")
+
+    archivo_pendientes = st.file_uploader(
+        "📤 Sube archivo Pendientes de Instalación",
+        type=["csv", "xlsx"],
+        key="pendientes_instalacion"
+    )
+
+    pendientes = None
+
+    if archivo_pendientes:
+        try:
+            pendientes = leer_archivo(archivo_pendientes)
+
+            if pendientes is not None:
+                pendientes = normalizar_columnas(pendientes)
+
+                st.success(f"Archivo de pendientes cargado: {len(pendientes)} registros")
+
+                columnas_pendientes = [
+                    "CLIENTE_NRO",
+                    "FECHA_REPORTE",
+                    "VENDEDOR_EH",
+                    "CLIENTE_NOMBRE",
+                    "CLIENTE_TELEFONO1"
+                ]
+
+                faltantes_pendientes = [
+                    c for c in columnas_pendientes if c not in pendientes.columns
+                ]
+
+                if faltantes_pendientes:
+                    st.error(f"Faltan columnas en pendientes: {faltantes_pendientes}")
+                    st.write("Columnas detectadas:")
+                    st.write(list(pendientes.columns))
+                else:
+                    pendientes["VENDEDOR_EH"] = pendientes["VENDEDOR_EH"].astype(str)
+
+                    st.subheader("📊 Resumen de Pendientes")
+
+                    total_pendientes = len(pendientes)
+                    socios_pendientes = pendientes["VENDEDOR_EH"].nunique()
+
+                    c1, c2 = st.columns(2)
+                    c1.metric("📋 Total pendientes", total_pendientes)
+                    c2.metric("👥 Socios con pendientes", socios_pendientes)
+
+                    resumen_pendientes = (
+                        pendientes.groupby("VENDEDOR_EH")
+                        .agg(
+                            Pendientes=("CLIENTE_NRO", "count")
+                        )
+                        .reset_index()
+                        .sort_values("Pendientes", ascending=False)
+                    )
+
+                    # Si el GrossAdd está cargado, jalamos nombres de socios desde ahí.
+                    if df is not None and "VENDEDOR_EH" in df.columns and "VENDEDOR_NOMBRE" in df.columns:
+                        socios_base = (
+                            df[["VENDEDOR_EH", "VENDEDOR_NOMBRE"]]
+                            .drop_duplicates()
+                            .copy()
+                        )
+                        socios_base["VENDEDOR_EH"] = socios_base["VENDEDOR_EH"].astype(str)
+
+                        resumen_pendientes = resumen_pendientes.merge(
+                            socios_base,
+                            on="VENDEDOR_EH",
+                            how="left"
+                        )
+                    else:
+                        resumen_pendientes["VENDEDOR_NOMBRE"] = ""
+
+                    st.dataframe(
+                        resumen_pendientes[[
+                            "VENDEDOR_EH",
+                            "VENDEDOR_NOMBRE",
+                            "Pendientes"
+                        ]],
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+                    st.subheader("🔎 Filtrar por socio")
+
+                    lista_socios = resumen_pendientes.copy()
+                    lista_socios["SOCIO_DISPLAY"] = lista_socios.apply(
+                        lambda x: f"{x['VENDEDOR_EH']} - {x['VENDEDOR_NOMBRE']}" if str(x["VENDEDOR_NOMBRE"]) != "nan" and str(x["VENDEDOR_NOMBRE"]).strip() != "" else str(x["VENDEDOR_EH"]),
+                        axis=1
+                    )
+
+                    socio_sel = st.selectbox(
+                        "Selecciona socio",
+                        lista_socios["SOCIO_DISPLAY"]
+                    )
+
+                    eh_sel = socio_sel.split(" - ")[0]
+
+                    detalle_pendientes = pendientes[
+                        pendientes["VENDEDOR_EH"] == eh_sel
+                    ][[
+                        "CLIENTE_NRO",
+                        "FECHA_REPORTE",
+                        "CLIENTE_NOMBRE",
+                        "CLIENTE_TELEFONO1"
+                    ]]
+
+                    st.subheader("📋 Detalle de pendientes por socio")
+
+                    st.dataframe(
+                        detalle_pendientes,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+                    nombre_socio = ""
+                    if df is not None and "VENDEDOR_EH" in df.columns and "VENDEDOR_NOMBRE" in df.columns:
+                        match = df[df["VENDEDOR_EH"].astype(str) == eh_sel]
+                        if len(match) > 0:
+                            nombre_socio = str(match.iloc[0]["VENDEDOR_NOMBRE"])
+
+                    st.subheader("📱 WhatsApp Pendientes")
+
+                    texto_pendientes = "📋 PENDIENTES DE INSTALACIÓN\n\n"
+                    texto_pendientes += f"👤 Socio: {nombre_socio}\n"
+                    texto_pendientes += f"EH: {eh_sel}\n"
+                    texto_pendientes += f"📌 Total pendientes: {len(detalle_pendientes)}\n\n"
+
+                    for _, row in detalle_pendientes.iterrows():
+                        texto_pendientes += (
+                            f"🔹 {row['CLIENTE_NRO']} | {row['CLIENTE_NOMBRE']}\n"
+                            f"📅 Reporte: {row['FECHA_REPORTE']}\n"
+                            f"📞 Tel: {row['CLIENTE_TELEFONO1']}\n\n"
+                        )
+
+                    st.text_area(
+                        "Mensaje para WhatsApp",
+                        texto_pendientes,
+                        height=420
+                    )
+
+                    st.link_button(
+                        "📲 Compartir pendientes por WhatsApp",
+                        "https://wa.me/?text=" + urllib.parse.quote(texto_pendientes)
+                    )
+
+                    st.subheader("📱 Reporte general de pendientes")
+
+                    texto_general_pendientes = "📋 RESUMEN GENERAL DE PENDIENTES\n\n"
+
+                    for _, row in resumen_pendientes.iterrows():
+                        texto_general_pendientes += (
+                            f"👤 {row['VENDEDOR_NOMBRE']}\n"
+                            f"EH: {row['VENDEDOR_EH']}\n"
+                            f"📌 Pendientes: {row['Pendientes']}\n"
+                            "----------------------\n"
+                        )
+
+                    st.text_area(
+                        "Mensaje general de pendientes",
+                        texto_general_pendientes,
+                        height=360
+                    )
+
+                    st.link_button(
+                        "📲 Compartir resumen general",
+                        "https://wa.me/?text=" + urllib.parse.quote(texto_general_pendientes)
+                    )
+
+        except Exception as e:
+            st.error(f"Error al procesar pendientes: {e}")
