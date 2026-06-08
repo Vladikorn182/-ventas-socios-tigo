@@ -540,7 +540,8 @@ with tab6:
                     "contratista",
                     "tipo_trabajo",
                     "turno_agendamiento",
-                    "dato_conexion",
+                    "dato_onexion",
+                    "estado_confirmacion",
                     "latitud",
                     "longitud"
                 ]
@@ -651,10 +652,11 @@ with tab6:
                     columnas_vista = [
                         "cliente_nro",
                         "estado",
+                        "estado_confirmacion",
                         "contratista",
                         "tipo_trabajo",
                         "turno_agendamiento",
-                        "dato_conexion",
+                        "dato_onexion",
                         "latitud",
                         "longitud"
                     ]
@@ -675,7 +677,7 @@ with tab6:
 
                         for _, row in grupo.iterrows():
                             texto_agenda += (
-                                f"🔹 {row['cliente_nro']} | {row['tipo_trabajo']} | {row['estado']} | {row['turno_agendamiento']}\n"
+                                f"🔹 {row['cliente_nro']} | {row['tipo_trabajo']} | {row['estado']} | {row['estado_confirmacion']} | {row['turno_agendamiento']}\n"
                             )
 
                         texto_agenda += "----------------------\n"
