@@ -55,6 +55,22 @@ def leer_archivo(archivo):
         st.error("Formato no permitido. Sube CSV o Excel .xlsx")
         return None
 
+def normalizar_columnas(df):
+    df = df.copy()
+    df.columns = [str(c).strip().upper().replace(" ", "_") for c in df.columns]
+    return df
+
+def obtener_medalla(posicion):
+    if posicion == 1:
+        return "🥇"
+    elif posicion == 2:
+        return "🥈"
+    elif posicion == 3:
+        return "🥉"
+    elif posicion in [4, 5]:
+        return "🏆"
+    return "📊"
+
 archivo = st.file_uploader("📤 Sube el archivo GrossAdd", type=["csv", "xlsx"])
 
 df = None
@@ -65,19 +81,20 @@ if archivo:
         df = leer_archivo(archivo)
 
         if df is not None:
-            st.success(f"Archivo cargado: {len(df)} registros")
+            st.success(f"Archivo GrossAdd cargado: {len(df)} registros")
 
             columnas_requeridas = [
                 "VENDEDOR_EH",
                 "VENDEDOR_NOMBRE",
                 "CLIENTE_NRO",
+                "CLIENTE_NOMBRE",
                 "FECHA_INSTALACION"
             ]
 
             faltantes = [c for c in columnas_requeridas if c not in df.columns]
 
             if faltantes:
-                st.error(f"Faltan columnas en el archivo: {faltantes}")
+                st.error(f"Faltan columnas en el GrossAdd: {faltantes}")
             else:
                 resumen = (
                     df.groupby(["VENDEDOR_EH", "VENDEDOR_NOMBRE"])
@@ -112,16 +129,19 @@ if archivo:
                     resumen["OBJETIVO"] - resumen["Ventas"]
                 ).clip(lower=0).astype(int)
 
-                resumen = resumen.sort_values("CUMPLIMIENTO", ascending=False)
+                resumen = resumen.sort_values("Ventas", ascending=False).reset_index(drop=True)
+                resumen["POSICION"] = resumen.index + 1
+                resumen["MEDALLA"] = resumen["POSICION"].apply(obtener_medalla)
 
     except Exception as e:
-        st.error(f"Error al procesar archivo: {e}")
+        st.error(f"Error al procesar GrossAdd: {e}")
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Dashboard",
     "🏆 Ranking",
     "🎯 Objetivos",
-    "📱 WhatsApp"
+    "📱 WhatsApp",
+    "📋 Pendientes de Pago"
 ])
 
 with tab1:
@@ -141,21 +161,11 @@ with tab1:
         c4.metric("📈 Cumplimiento", f"{cumplimiento_total}%")
 
         st.progress(min(cumplimiento_total, 100) / 100)
-        st.metric("⏳ Faltan para el objetivo global", int(faltan_total))
-
-        col_a, col_b = st.columns(2)
-
-        with col_a:
-            st.subheader("🏆 Top ventas")
-            st.bar_chart(resumen.set_index("VENDEDOR_NOMBRE")["Ventas"])
-
-        with col_b:
-            st.subheader("📈 Cumplimiento")
-            st.bar_chart(resumen.set_index("VENDEDOR_NOMBRE")["CUMPLIMIENTO"])
+        st.metric("⏳ Faltan para objetivo", int(faltan_total))
 
         st.subheader("🏅 Top 5 Socios")
         st.dataframe(
-            resumen.head(5)[["VENDEDOR_NOMBRE", "Ventas", "OBJETIVO", "CUMPLIMIENTO", "FALTAN"]],
+            resumen.head(5)[["MEDALLA", "POSICION", "VENDEDOR_NOMBRE", "Ventas", "OBJETIVO", "CUMPLIMIENTO", "FALTAN"]],
             use_container_width=True,
             hide_index=True
         )
@@ -168,6 +178,8 @@ with tab2:
     if resumen is not None:
         st.dataframe(
             resumen[[
+                "MEDALLA",
+                "POSICION",
                 "VENDEDOR_EH",
                 "VENDEDOR_NOMBRE",
                 "Ventas",
@@ -238,22 +250,15 @@ with tab4:
     st.subheader("📱 Reportes para WhatsApp")
 
     if resumen is not None:
-        opcion = st.radio(
-            "Tipo de reporte",
-            [
-                "Resumen individual",
-                "Seguimiento individual con códigos",
-                "Reporte general"
-            ]
-        )
+        opcion = st.radio("Tipo de reporte", ["Resumen individual", "Reporte general"])
 
-        if opcion in ["Resumen individual", "Seguimiento individual con códigos"]:
+        if opcion == "Resumen individual":
             socio = st.selectbox("Selecciona socio", resumen["VENDEDOR_NOMBRE"])
             fila = resumen[resumen["VENDEDOR_NOMBRE"] == socio].iloc[0]
 
             texto = (
                 f"📊 AVANCE DE VENTAS\n\n"
-                f"👤 {fila['VENDEDOR_NOMBRE']}\n"
+                f"{fila['MEDALLA']} {fila['VENDEDOR_NOMBRE']}\n"
                 f"EH: {fila['VENDEDOR_EH']}\n\n"
                 f"✅ Ventas: {fila['Ventas']}\n"
                 f"🎯 Objetivo: {fila['OBJETIVO']}\n"
@@ -261,49 +266,29 @@ with tab4:
                 f"⏳ Faltan: {fila['FALTAN']}\n"
             )
 
-            if opcion == "Seguimiento individual con códigos":
-                detalle = df[
-                    df["VENDEDOR_NOMBRE"] == fila["VENDEDOR_NOMBRE"]
-                ][["CLIENTE_NRO", "FECHA_INSTALACION"]]
-
-                texto += "\n📋 CÓDIGOS PARA SEGUIMIENTO:\n\n"
-
-                for _, venta in detalle.iterrows():
-                    texto += f"🔹 {venta['CLIENTE_NRO']} | {venta['FECHA_INSTALACION']}\n"
-
-            st.text_area("Mensaje", texto, height=450)
-
-            st.link_button(
-                "📲 Compartir por WhatsApp",
-                "https://wa.me/?text=" + urllib.parse.quote(texto)
-            )
+            st.text_area("Mensaje", texto, height=300)
+            st.link_button("📲 Compartir por WhatsApp", "https://wa.me/?text=" + urllib.parse.quote(texto))
 
         else:
             texto = "📊 AVANCE GENERAL DE VENTAS\n\n"
 
             for _, row in resumen.iterrows():
                 texto += (
-                    f"👤 {row['VENDEDOR_NOMBRE']}\n"
+                    f"{row['MEDALLA']} {row['VENDEDOR_NOMBRE']}\n"
                     f"✅ {row['Ventas']} / 🎯 {row['OBJETIVO']}\n"
                     f"📈 {row['CUMPLIMIENTO']}% | Faltan: {row['FALTAN']}\n"
                     "----------------------\n"
                 )
 
             st.text_area("Mensaje general", texto, height=450)
-
-            st.link_button(
-                "📲 Compartir reporte general",
-                "https://wa.me/?text=" + urllib.parse.quote(texto)
-            )
+            st.link_button("📲 Compartir reporte general", "https://wa.me/?text=" + urllib.parse.quote(texto))
     else:
         st.info("Primero sube el archivo GrossAdd.")
-# =========================
-# PENDIENTES DE PAGO
-# =========================
-with tab7:
+
+with tab5:
     st.subheader("📋 Pendientes de Pago")
 
-    st.write("Sube el archivo PENDIENTE_INST_SIN_PAGO para seleccionar un socio y enviarle sus códigos pendientes por WhatsApp.")
+    st.write("Sube el archivo PENDIENTE_INST_SIN_PAGO, selecciona un socio y envía sus pendientes por WhatsApp.")
 
     socios_dict = {
         "91207": "GUALBERTO FERNANDO SANJINES",
@@ -328,22 +313,21 @@ with tab7:
         "78099": "GEOVANA CARLA SIÑANI LUNA",
     }
 
-    archivo_pendientes_pago = st.file_uploader(
+    archivo_pago = st.file_uploader(
         "📤 Sube archivo PENDIENTE_INST_SIN_PAGO",
         type=["csv", "xlsx"],
         key="pendientes_pago"
     )
 
-    if archivo_pendientes_pago:
+    if archivo_pago:
         try:
-            pendientes_pago = leer_archivo(archivo_pendientes_pago)
+            pagos = leer_archivo(archivo_pago)
 
-            if pendientes_pago is not None:
-                pendientes_pago = normalizar_columnas(pendientes_pago)
+            if pagos is not None:
+                pagos = normalizar_columnas(pagos)
+                st.success(f"Archivo cargado: {len(pagos)} registros")
 
-                st.success(f"Archivo de pendientes de pago cargado: {len(pendientes_pago)} registros")
-
-                columnas_requeridas_pago = [
+                columnas = [
                     "CLIENTE_NRO",
                     "FECHA_REPORTE",
                     "VENDEDOR_EH",
@@ -353,73 +337,39 @@ with tab7:
                     "CLIENTE_TELEFONO2"
                 ]
 
-                faltantes_pago = [
-                    c for c in columnas_requeridas_pago if c not in pendientes_pago.columns
-                ]
+                faltantes = [c for c in columnas if c not in pagos.columns]
 
-                if faltantes_pago:
-                    st.error(f"Faltan columnas en pendientes de pago: {faltantes_pago}")
+                if faltantes:
+                    st.error(f"Faltan columnas: {faltantes}")
                     st.write("Columnas detectadas:")
-                    st.write(list(pendientes_pago.columns))
+                    st.write(list(pagos.columns))
                 else:
-                    pendientes_pago["VENDEDOR_EH"] = pendientes_pago["VENDEDOR_EH"].astype(str)
-                    pendientes_pago["SOCIO"] = pendientes_pago["VENDEDOR_EH"].map(socios_dict).fillna("SIN NOMBRE REGISTRADO")
-                    pendientes_pago["SOCIO_DISPLAY"] = pendientes_pago["VENDEDOR_EH"] + " - " + pendientes_pago["SOCIO"]
+                    pagos["VENDEDOR_EH"] = pagos["VENDEDOR_EH"].astype(str)
+                    pagos["SOCIO"] = pagos["VENDEDOR_EH"].map(socios_dict).fillna("SIN NOMBRE")
+                    pagos["SOCIO_DISPLAY"] = pagos["VENDEDOR_EH"] + " - " + pagos["SOCIO"]
 
-                    resumen_pago = (
-                        pendientes_pago.groupby(["VENDEDOR_EH", "SOCIO", "SOCIO_DISPLAY"])
-                        .agg(Pendientes=("CLIENTE_NRO", "count"))
-                        .reset_index()
+                    socios_con_pendientes = (
+                        pagos[["VENDEDOR_EH", "SOCIO", "SOCIO_DISPLAY"]]
+                        .drop_duplicates()
                         .sort_values("SOCIO")
                     )
 
-                    st.subheader("👤 Seleccionar socio")
+                    socio_sel = st.selectbox("Selecciona socio", socios_con_pendientes["SOCIO_DISPLAY"])
 
-                    socio_sel = st.selectbox(
-                        "Socio",
-                        resumen_pago["SOCIO_DISPLAY"]
-                    )
+                    detalle = pagos[pagos["SOCIO_DISPLAY"] == socio_sel].copy()
 
-                    detalle_pago = pendientes_pago[
-                        pendientes_pago["SOCIO_DISPLAY"] == socio_sel
-                    ][[
-                        "CLIENTE_NRO",
-                        "FECHA_REPORTE",
-                        "FECHA_GENERACION_OT",
-                        "CLIENTE_NOMBRE",
-                        "NODO_NOMBRE",
-                        "CLIENTE_TELEFONO2",
-                        "VENDEDOR_EH",
-                        "SOCIO"
-                    ]].copy()
+                    eh = detalle.iloc[0]["VENDEDOR_EH"]
+                    nombre = detalle.iloc[0]["SOCIO"]
 
-                    eh_sel = detalle_pago.iloc[0]["VENDEDOR_EH"]
-                    nombre_socio = detalle_pago.iloc[0]["SOCIO"]
+                    st.metric("📌 Pendientes de pago", len(detalle))
 
-                    st.metric("📌 Pendientes de pago", len(detalle_pago))
+                    texto = "📋 PENDIENTES DE PAGO\n\n"
+                    texto += f"👤 Socio: {nombre}\n"
+                    texto += f"EH: {eh}\n"
+                    texto += f"📌 Total pendientes: {len(detalle)}\n\n"
 
-                    st.subheader("📋 Códigos pendientes del socio")
-
-                    st.dataframe(
-                        detalle_pago[[
-                            "CLIENTE_NRO",
-                            "FECHA_REPORTE",
-                            "FECHA_GENERACION_OT",
-                            "CLIENTE_NOMBRE",
-                            "NODO_NOMBRE",
-                            "CLIENTE_TELEFONO2"
-                        ]],
-                        use_container_width=True,
-                        hide_index=True
-                    )
-
-                    texto_pago = "📋 PENDIENTES DE PAGO\n\n"
-                    texto_pago += f"👤 Socio: {nombre_socio}\n"
-                    texto_pago += f"EH: {eh_sel}\n"
-                    texto_pago += f"📌 Total pendientes: {len(detalle_pago)}\n\n"
-
-                    for _, row in detalle_pago.iterrows():
-                        texto_pago += (
+                    for _, row in detalle.iterrows():
+                        texto += (
                             f"🔹 Código: {row['CLIENTE_NRO']}\n"
                             f"📅 Reporte: {row['FECHA_REPORTE']}\n"
                             f"🗓️ Generación OT: {row['FECHA_GENERACION_OT']}\n"
@@ -428,25 +378,11 @@ with tab7:
                             f"📞 Tel: {row['CLIENTE_TELEFONO2']}\n\n"
                         )
 
-                    st.subheader("📱 Mensaje para WhatsApp")
-
-                    st.text_area(
-                        "Mensaje",
-                        texto_pago,
-                        height=500
-                    )
+                    st.text_area("Mensaje WhatsApp", texto, height=500)
 
                     st.link_button(
                         "📲 Compartir por WhatsApp",
-                        "https://wa.me/?text=" + urllib.parse.quote(texto_pago)
-                    )
-
-                    st.subheader("📊 Resumen rápido")
-
-                    st.dataframe(
-                        resumen_pago[["SOCIO_DISPLAY", "Pendientes"]],
-                        use_container_width=True,
-                        hide_index=True
+                        "https://wa.me/?text=" + urllib.parse.quote(texto)
                     )
 
         except Exception as e:
