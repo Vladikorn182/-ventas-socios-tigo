@@ -552,7 +552,7 @@ with tab5:
 with tab6:
     st.subheader("📋 Pendientes de Instalación")
 
-    st.write("Sube el archivo de pendientes de instalación, selecciona un socio y envía sus códigos por WhatsApp.")
+    st.write("Sube el archivo PENDIENTE_INST_CON_PAGO, selecciona un socio y envía sus códigos por WhatsApp.")
 
     archivo_pendientes_inst = st.file_uploader(
         "📤 Sube archivo Pendientes de Instalación",
@@ -568,9 +568,12 @@ with tab6:
                 pend_inst = normalizar_columnas(pend_inst)
                 st.success(f"Archivo cargado: {len(pend_inst)} registros")
 
-                columnas = ["CLIENTE_NRO", "FECHA_REPORTE", "VENDEDOR_EH"]
+                if len(pend_inst) == 0:
+                    st.warning("El archivo no tiene registros pendientes. Solo tiene encabezados, por eso no aparecen socios para seleccionar.")
+                    st.stop()
 
-                faltantes = [c for c in columnas if c not in pend_inst.columns]
+                columnas_base = ["CLIENTE_NRO", "FECHA_REPORTE", "VENDEDOR_EH"]
+                faltantes = [c for c in columnas_base if c not in pend_inst.columns]
 
                 if faltantes:
                     st.error(f"Faltan columnas: {faltantes}")
@@ -578,20 +581,48 @@ with tab6:
                     st.write(list(pend_inst.columns))
                 else:
                     pend_inst["VENDEDOR_EH"] = pend_inst["VENDEDOR_EH"].astype(str)
-                    pend_inst["SOCIO"] = pend_inst["VENDEDOR_EH"].map(SOCIOS_DICT).fillna("SIN NOMBRE")
+
+                    if "VENDEDOR_NOMBRE" in pend_inst.columns:
+                        pend_inst["SOCIO"] = pend_inst["VENDEDOR_NOMBRE"].astype(str)
+                    else:
+                        pend_inst["SOCIO"] = pend_inst["VENDEDOR_EH"].map(SOCIOS_DICT).fillna("SIN NOMBRE")
+
                     pend_inst["SOCIO_DISPLAY"] = pend_inst["VENDEDOR_EH"] + " - " + pend_inst["SOCIO"]
 
                     socios_inst = (
-                        pend_inst[["VENDEDOR_EH", "SOCIO", "SOCIO_DISPLAY"]]
-                        .drop_duplicates()
+                        pend_inst.groupby(["VENDEDOR_EH", "SOCIO", "SOCIO_DISPLAY"])
+                        .agg(Pendientes=("CLIENTE_NRO", "count"))
+                        .reset_index()
                         .sort_values("SOCIO")
                     )
 
-                    socio_sel = st.selectbox("Selecciona socio", socios_inst["SOCIO_DISPLAY"], key="sel_pend_inst")
-                    detalle = pend_inst[pend_inst["SOCIO_DISPLAY"] == socio_sel].copy()
+                    if len(socios_inst) == 0:
+                        st.warning("No hay socios con pendientes en este archivo.")
+                        st.stop()
 
-                    eh = detalle.iloc[0]["VENDEDOR_EH"]
-                    nombre = detalle.iloc[0]["SOCIO"]
+                    socios_inst["MOSTRAR"] = (
+                        socios_inst["SOCIO_DISPLAY"]
+                        + " ("
+                        + socios_inst["Pendientes"].astype(str)
+                        + " pendientes)"
+                    )
+
+                    socio_sel = st.selectbox(
+                        "Selecciona socio",
+                        socios_inst["MOSTRAR"].tolist(),
+                        key="sel_pend_inst"
+                    )
+
+                    socio_display = socios_inst[
+                        socios_inst["MOSTRAR"] == socio_sel
+                    ]["SOCIO_DISPLAY"].iloc[0]
+
+                    detalle = pend_inst[
+                        pend_inst["SOCIO_DISPLAY"] == socio_display
+                    ].copy()
+
+                    eh = str(detalle.iloc[0]["VENDEDOR_EH"])
+                    nombre = str(detalle.iloc[0]["SOCIO"])
 
                     st.metric("📌 Pendientes de instalación", len(detalle))
 
@@ -599,6 +630,16 @@ with tab6:
                     texto += f"👤 Socio: {nombre}\n"
                     texto += f"EH: {eh}\n"
                     texto += f"📌 Total pendientes: {len(detalle)}\n\n"
+
+                    columnas_mostrar = ["CLIENTE_NRO", "FECHA_REPORTE", "VENDEDOR_EH"]
+                    if "VENDEDOR_NOMBRE" in detalle.columns:
+                        columnas_mostrar.append("VENDEDOR_NOMBRE")
+
+                    st.dataframe(
+                        detalle[columnas_mostrar],
+                        use_container_width=True,
+                        hide_index=True
+                    )
 
                     for _, row in detalle.iterrows():
                         texto += (
