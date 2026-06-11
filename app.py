@@ -560,6 +560,30 @@ with tab6:
         key="pendientes_instalacion"
     )
 
+    def analizar_crm_motivo(valor):
+        motivo = str(valor).strip()
+        motivo_lower = motivo.lower()
+
+        if motivo == "" or motivo_lower in ["nan", "none", "null"]:
+            return "Sin CRM / sin motivo registrado"
+
+        if any(x in motivo_lower for x in ["no atend", "no se atend", "no contact", "no contesta", "sin contacto"]):
+            return "Instalación no atendida / contactar cliente"
+
+        if any(x in motivo_lower for x in ["pendiente", "pago", "sin pago"]):
+            return "Pendiente de validación de pago"
+
+        if any(x in motivo_lower for x in ["reagend", "agenda", "programar", "reprogram"]):
+            return "Reagendar instalación"
+
+        if any(x in motivo_lower for x in ["tap", "satur", "nodo", "técnic", "tecnic", "cobertura", "factibilidad", "poste"]):
+            return "Revisión técnica / validar con operaciones"
+
+        if any(x in motivo_lower for x in ["cliente", "desiste", "rechaza", "anula", "cancel"]):
+            return "Validar con cliente / posible desistimiento"
+
+        return motivo
+
     if archivo_pendientes_inst:
         try:
             pend_inst = leer_archivo(archivo_pendientes_inst)
@@ -572,7 +596,14 @@ with tab6:
                     st.warning("El archivo no tiene registros pendientes. Solo tiene encabezados, por eso no aparecen socios para seleccionar.")
                     st.stop()
 
-                columnas_base = ["CLIENTE_NRO", "FECHA_REPORTE", "VENDEDOR_EH"]
+                columnas_base = [
+                    "CLIENTE_NRO",
+                    "FECHA_REPORTE",
+                    "VENDEDOR_EH",
+                    "NODO_NOMBRE",
+                    "CRM_MOTIVO"
+                ]
+
                 faltantes = [c for c in columnas_base if c not in pend_inst.columns]
 
                 if faltantes:
@@ -588,6 +619,7 @@ with tab6:
                         pend_inst["SOCIO"] = pend_inst["VENDEDOR_EH"].map(SOCIOS_DICT).fillna("SIN NOMBRE")
 
                     pend_inst["SOCIO_DISPLAY"] = pend_inst["VENDEDOR_EH"] + " - " + pend_inst["SOCIO"]
+                    pend_inst["ANALISIS_CRM"] = pend_inst["CRM_MOTIVO"].apply(analizar_crm_motivo)
 
                     socios_inst = (
                         pend_inst.groupby(["VENDEDOR_EH", "SOCIO", "SOCIO_DISPLAY"])
@@ -621,19 +653,29 @@ with tab6:
                         pend_inst["SOCIO_DISPLAY"] == socio_display
                     ].copy()
 
+                    if len(detalle) == 0:
+                        st.warning("No hay pendientes para el socio seleccionado.")
+                        st.stop()
+
                     eh = str(detalle.iloc[0]["VENDEDOR_EH"])
                     nombre = str(detalle.iloc[0]["SOCIO"])
 
                     st.metric("📌 Pendientes de instalación", len(detalle))
 
-                    texto = "📋 PENDIENTES DE INSTALACIÓN\n\n"
-                    texto += f"👤 Socio: {nombre}\n"
-                    texto += f"EH: {eh}\n"
-                    texto += f"📌 Total pendientes: {len(detalle)}\n\n"
+                    columnas_mostrar = [
+                        "CLIENTE_NRO",
+                        "FECHA_REPORTE",
+                        "VENDEDOR_EH",
+                        "SOCIO",
+                        "NODO_NOMBRE",
+                        "CRM_MOTIVO",
+                        "ANALISIS_CRM"
+                    ]
 
-                    columnas_mostrar = ["CLIENTE_NRO", "FECHA_REPORTE", "VENDEDOR_EH"]
-                    if "VENDEDOR_NOMBRE" in detalle.columns:
-                        columnas_mostrar.append("VENDEDOR_NOMBRE")
+                    if "CLIENTE_TELEFONO1" in detalle.columns:
+                        columnas_mostrar.append("CLIENTE_TELEFONO1")
+                    if "CLIENTE_TELEFONO2" in detalle.columns:
+                        columnas_mostrar.append("CLIENTE_TELEFONO2")
 
                     st.dataframe(
                         detalle[columnas_mostrar],
@@ -641,13 +683,32 @@ with tab6:
                         hide_index=True
                     )
 
+                    texto = "📋 PENDIENTES DE INSTALACIÓN\n\n"
+                    texto += f"👤 Socio: {nombre}\n"
+                    texto += f"EH: {eh}\n"
+                    texto += f"📌 Total pendientes: {len(detalle)}\n\n"
+
                     for _, row in detalle.iterrows():
+                        telefono_1 = row["CLIENTE_TELEFONO1"] if "CLIENTE_TELEFONO1" in detalle.columns else ""
+                        telefono_2 = row["CLIENTE_TELEFONO2"] if "CLIENTE_TELEFONO2" in detalle.columns else ""
+
+                        telefonos = []
+                        if str(telefono_1).strip() not in ["", "nan", "None"]:
+                            telefonos.append(str(telefono_1))
+                        if str(telefono_2).strip() not in ["", "nan", "None"] and str(telefono_2) not in telefonos:
+                            telefonos.append(str(telefono_2))
+
+                        telefonos_txt = " / ".join(telefonos) if telefonos else "Sin referencia"
+
                         texto += (
                             f"🔹 Código: {row['CLIENTE_NRO']}\n"
-                            f"📅 Generado: {row['FECHA_REPORTE']}\n\n"
+                            f"📅 Generado: {row['FECHA_REPORTE']}\n"
+                            f"📍 Nodo: {row['NODO_NOMBRE']}\n"
+                            f"📞 Ref.: {telefonos_txt}\n"
+                            f"📝 CRM: {row['ANALISIS_CRM']}\n\n"
                         )
 
-                    st.text_area("Mensaje WhatsApp", texto, height=420, key="txt_pend_inst")
+                    st.text_area("Mensaje WhatsApp", texto, height=520, key="txt_pend_inst")
                     st.link_button("📲 Compartir por WhatsApp", "https://wa.me/?text=" + urllib.parse.quote(texto))
 
         except Exception as e:
