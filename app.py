@@ -410,6 +410,63 @@ with tab2:
 with tab3:
     st.subheader("🎯 Administración de Objetivos")
 
+    st.write("Puedes actualizar los objetivos de forma masiva subiendo un Excel con las columnas:")
+    st.code("POS_CODE | POS_OWNER | BU JUNIO")
+
+    archivo_objetivos = st.file_uploader(
+        "📤 Subir archivo de objetivos",
+        type=["csv", "xlsx"],
+        key="objetivos_masivo"
+    )
+
+    if archivo_objetivos:
+        try:
+            obj = leer_archivo(archivo_objetivos)
+
+            if obj is not None:
+                obj = normalizar_columnas(obj)
+
+                columnas_obj = ["POS_CODE", "POS_OWNER", "BU_JUNIO"]
+                faltantes_obj = [c for c in columnas_obj if c not in obj.columns]
+
+                if faltantes_obj:
+                    st.error(f"Faltan columnas en el archivo de objetivos: {faltantes_obj}")
+                    st.write("Columnas detectadas:")
+                    st.write(list(obj.columns))
+                else:
+                    obj["POS_CODE"] = obj["POS_CODE"].astype(str)
+                    obj["BU_JUNIO"] = pd.to_numeric(obj["BU_JUNIO"], errors="coerce").fillna(0).astype(int)
+
+                    vista_obj = obj[["POS_CODE", "POS_OWNER", "BU_JUNIO"]].copy()
+                    vista_obj.columns = ["EH", "NOMBRE", "OBJETIVO"]
+
+                    st.success(f"Objetivos detectados: {len(vista_obj)} socios")
+                    st.dataframe(vista_obj, use_container_width=True, hide_index=True)
+
+                    if st.button("💾 Guardar objetivos desde archivo"):
+                        for _, row in vista_obj.iterrows():
+                            cursor.execute("""
+                                INSERT INTO objetivos (EH, NOMBRE, OBJETIVO)
+                                VALUES (?, ?, ?)
+                                ON CONFLICT(EH) DO UPDATE SET
+                                    NOMBRE=excluded.NOMBRE,
+                                    OBJETIVO=excluded.OBJETIVO
+                            """, (
+                                str(row["EH"]),
+                                str(row["NOMBRE"]),
+                                int(row["OBJETIVO"])
+                            ))
+
+                        conn.commit()
+                        st.success("Objetivos actualizados correctamente. Presiona F5 para recalcular el dashboard.")
+
+        except Exception as e:
+            st.error(f"Error al procesar objetivos: {e}")
+
+    st.divider()
+
+    st.subheader("✍️ Edición manual de objetivos")
+
     if df is not None:
         socios = (
             df[["VENDEDOR_EH", "VENDEDOR_NOMBRE"]]
@@ -445,7 +502,7 @@ with tab3:
 
                 nuevos.append((eh, nombre, int(objetivo)))
 
-            if st.form_submit_button("💾 Guardar objetivos"):
+            if st.form_submit_button("💾 Guardar objetivos manuales"):
                 for eh, nombre, objetivo in nuevos:
                     cursor.execute("""
                         INSERT INTO objetivos (EH, NOMBRE, OBJETIVO)
@@ -458,7 +515,7 @@ with tab3:
                 conn.commit()
                 st.success("Objetivos guardados. Presiona F5 para actualizar.")
     else:
-        st.info("Primero sube el archivo GrossAdd.")
+        st.info("También puedes editar manualmente después de subir el GrossAdd.")
 
 
 # =========================
