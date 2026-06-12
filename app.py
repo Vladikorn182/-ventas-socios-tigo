@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import urllib.parse
+import re
+from io import BytesIO
 
 st.set_page_config(page_title="Dashboard Tigo Ventas", layout="wide")
 
@@ -99,6 +101,37 @@ def normalizar_columnas(df):
     df = df.copy()
     df.columns = [str(c).strip().upper().replace(" ", "_") for c in df.columns]
     return df
+
+def convertir_excel_descarga(df_exportar, nombre_hoja="Datos"):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df_exportar.to_excel(writer, index=False, sheet_name=nombre_hoja)
+    output.seek(0)
+    return output
+
+def extraer_telefonos_limpios(*valores):
+    telefonos = []
+    for valor in valores:
+        if pd.isna(valor):
+            continue
+        texto = str(valor)
+        encontrados = re.findall(r"\d{7,8}", texto)
+        for tel in encontrados:
+            if tel not in telefonos:
+                telefonos.append(tel)
+    return telefonos
+
+
+def formatear_telefonos_whatsapp(*valores):
+    telefonos = extraer_telefonos_limpios(*valores)
+    if not telefonos:
+        return "📞 Titular: Sin referencia\n"
+
+    lineas = []
+    lineas.append(f"📞 Titular: {telefonos[0]}")
+    for i, tel in enumerate(telefonos[1:], start=1):
+        lineas.append(f"📞 Ref. {i}: {tel}")
+    return "\n".join(lineas) + "\n"
 
 
 def obtener_codigo_minimo():
@@ -691,24 +724,44 @@ with tab6:
                     for _, row in detalle.iterrows():
                         telefono_1 = row["CLIENTE_TELEFONO1"] if "CLIENTE_TELEFONO1" in detalle.columns else ""
                         telefono_2 = row["CLIENTE_TELEFONO2"] if "CLIENTE_TELEFONO2" in detalle.columns else ""
-
-                        telefonos = []
-                        if str(telefono_1).strip() not in ["", "nan", "None"]:
-                            telefonos.append(str(telefono_1))
-                        if str(telefono_2).strip() not in ["", "nan", "None"] and str(telefono_2) not in telefonos:
-                            telefonos.append(str(telefono_2))
-
-                        telefonos_txt = " / ".join(telefonos) if telefonos else "Sin referencia"
+                        telefonos_txt = formatear_telefonos_whatsapp(telefono_1, telefono_2)
 
                         texto += (
                             f"🔹 Código: {row['CLIENTE_NRO']}\n"
                             f"📅 Generado: {row['FECHA_REPORTE']}\n"
                             f"📍 Nodo: {row['NODO_NOMBRE']}\n"
-                            f"📞 Ref.: {telefonos_txt}\n"
+                            f"{telefonos_txt}"
                             f"📝 CRM: {row['ANALISIS_CRM']}\n\n"
                         )
 
-                    st.text_area("Mensaje WhatsApp", texto, height=520, key="txt_pend_inst")
+
+                    # Descargar Excel unificado
+                    columnas_exportar = [c for c in [
+                        "CLIENTE_NRO",
+                        "FECHA_REPORTE",
+                        "VENDEDOR_EH",
+                        "VENDEDOR_NOMBRE",
+                        "CLIENTE_NOMBRE",
+                        "NODO_NOMBRE",
+                        "CRM_MOTIVO",
+                        "ANALISIS_CRM",
+                        "CLIENTE_TELEFONO1",
+                        "CLIENTE_TELEFONO2"
+                    ] if c in detalle.columns]
+
+                    excel_unificado = convertir_excel_descarga(
+                        detalle[columnas_exportar],
+                        "Pendientes"
+                    )
+
+                    st.download_button(
+                        label="📥 Descargar Excel unificado",
+                        data=excel_unificado,
+                        file_name=f"pendientes_instalacion_{eh}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+
+                    st.text_area("Mensaje WhatsApp", texto, height=520, key=f"txt_pend_inst_{eh}")
                     st.link_button("📲 Compartir por WhatsApp", "https://wa.me/?text=" + urllib.parse.quote(texto))
 
         except Exception as e:
