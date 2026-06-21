@@ -1,0 +1,24 @@
+AGENDA TÉCNICA V3 - APP INDEPENDIENTE
+
+IMPORTANTE:
+- Este ZIP NO engloba tu sistema anterior.
+- Es una app independiente para probar Agenda Técnica sin dañar Ranking, Pendientes, Suspendidas o WhatsApp.
+- Dentro de la app debes subir el Excel diario BO-CITA SERVICIO NACIONAL.xlsx.
+- No subas este ZIP dentro de la app.
+
+ARCHIVOS:
+- app.py
+- requirements.txt
+
+PRUEBA LOCAL:
+1. Descomprimir el ZIP en una carpeta nueva.
+2. Abrir terminal en esa carpeta.
+3. Ejecutar: streamlit run app.py
+4. Subir el Excel diario.
+
+RENDER / GITHUB:
+1. Descomprimir el ZIP.
+2. Subir app.py y requirements.txt a GitHub, no el ZIP.
+3. En Render, Start Command: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
+
+Si sale 0, abrir el expander DIAGNÓSTICO DEL ARCHIVO y mandar captura.
