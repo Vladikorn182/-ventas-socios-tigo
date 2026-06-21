@@ -59,3 +59,13 @@ pendientes_inst.py
 pendientes_pago.py
 suspendidas.py
 objetivos_configuracion.py
+
+
+ACTUALIZACIÓN WHATSAPP AMIGABLE:
+- Mensaje general con encabezado claro, fecha, total, socios con agenda y ranking con emojis.
+- Mensaje individual por socio con código, cliente, nodo, turno y referencia.
+- Formato optimizado para copiar y pegar en WhatsApp.
+
+
+ACTUALIZACIÓN FORMATO CORTO WHATSAPP:
+El mensaje individual por socio ahora muestra: Fecha, Socio, EH, Total y clientes en línea corta: Código | Nodo | Turno.

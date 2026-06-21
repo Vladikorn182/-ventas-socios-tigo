@@ -237,42 +237,69 @@ def nombre_corto(nombre: str) -> str:
 def mensaje_whatsapp_general(resumen: pd.DataFrame, fecha_consulta: date) -> str:
     total = int(resumen["Instalaciones"].sum()) if not resumen.empty else 0
     fecha_txt = fecha_consulta.strftime("%d/%m/%Y")
+    socios_con_agenda = resumen["EH"].nunique() if not resumen.empty else 0
+
     lineas = [
-        f"📌 INSTALACIONES PROGRAMADAS - {fecha_txt}",
-        "",
-        f"Total instalaciones: {total}",
+        "📌 *AGENDA TÉCNICA DEL DÍA*",
+        f"📅 Fecha: *{fecha_txt}*",
+        f"🔧 Total instalaciones: *{total}*",
+        f"👥 Socios con agenda: *{socios_con_agenda}*",
         "",
     ]
-    if resumen.empty:
-        lineas.append("No se encontraron instalaciones para los EH de mis socios.")
-    else:
-        for _, r in resumen.iterrows():
-            lineas.append(f"{r['EH']} - {nombre_corto(r['Socio'])}: {int(r['Instalaciones'])}")
-    lineas += ["", "Por favor realizar seguimiento para asegurar la instalación del día."]
-    return "\n".join(lineas)
 
+    if resumen.empty:
+        lineas += [
+            "⚠️ No se encontraron instalaciones programadas para los EH configurados.",
+            "",
+            "Por favor validar si el archivo corresponde a la fecha correcta.",
+        ]
+        return "\n".join(lineas)
+
+    lineas.append("📋 *Resumen por socio:*")
+    for i, (_, r) in enumerate(resumen.iterrows(), start=1):
+        medalla = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "🔹"
+        lineas.append(
+            f"{medalla} *{r['EH']}* - {nombre_corto(r['Socio'])}: *{int(r['Instalaciones'])}* inst."
+        )
+
+    lineas += [
+        "",
+        "✅ *Acción requerida:*",
+        "Por favor realizar seguimiento temprano, confirmar contacto con el cliente y reportar cualquier inconveniente durante el día.",
+    ]
+    return "\n".join(lineas)
 
 def mensaje_whatsapp_socio(detalle_socio: pd.DataFrame, fecha_consulta: date) -> str:
     if detalle_socio.empty:
         return ""
+
     eh = detalle_socio.iloc[0]["EH"]
     socio = detalle_socio.iloc[0]["Socio"]
     fecha_txt = fecha_consulta.strftime("%d/%m/%Y")
+
     lineas = [
-        f"📌 INSTALACIONES PROGRAMADAS - {fecha_txt}",
-        f"EH: {eh}",
-        f"Socio: {socio}",
-        f"Total: {len(detalle_socio)}",
+        "📌 *AGENDA TÉCNICA DEL DÍA*",
         "",
+        f"📅 *Fecha:* {fecha_txt}",
+        f"👤 *Socio:* {socio}",
+        f"🆔 *EH:* {eh}",
+        f"🔧 *Total:* {len(detalle_socio)} instalaciones",
+        "",
+        "📋 *Clientes agendados:*",
     ]
-    for _, r in detalle_socio.iterrows():
-        codigo = r.get("Código cliente", "")
-        nodo = r.get("Nodo", "")
-        turno = r.get("Turno", "")
-        tel = r.get("Teléfono", "")
-        lineas.append(f"• {codigo} | {nodo} | Turno: {turno} | Ref: {tel}")
-    lineas += ["", "Por favor realizar seguimiento y confirmar avance."]
-    return "\n".join(lineas)
+
+    for i, (_, r) in enumerate(detalle_socio.iterrows(), start=1):
+        codigo = r.get("Código cliente", "") or "S/D"
+        nodo = r.get("Nodo", "") or "S/D"
+        turno = r.get("Turno", "") or "S/D"
+        lineas.append(f"{i}. {codigo} | {nodo} | {turno}")
+
+    lineas += [
+        "",
+        "✅ Favor realizar seguimiento y reportar cualquier observación.",
+    ]
+    return "
+".join(lineas)
 
 
 def generar_excel(resumen: pd.DataFrame, detalle: pd.DataFrame, sin_instalacion: pd.DataFrame, diagnostico: dict) -> BytesIO:
