@@ -1,0 +1,42 @@
+INTEGRACIÓN DEL MÓDULO AGENDA TÉCNICA
+
+1) Copia el archivo agenda_tecnica.py en la misma carpeta donde está tu app.py.
+
+2) En app.py agrega esta importación arriba:
+
+from agenda_tecnica import mostrar_agenda_tecnica
+
+3) En tu menú principal agrega una opción nueva, por ejemplo:
+
+opcion = st.sidebar.selectbox(
+    "Menú",
+    [
+        "Inicio",
+        "Pendientes de instalación",
+        "Pendientes de pago",
+        "Suspendidas",
+        "Agenda Técnica",
+    ]
+)
+
+4) En la parte donde llamas a cada módulo agrega:
+
+if opcion == "Agenda Técnica":
+    mostrar_agenda_tecnica()
+
+5) Para probar solo este módulo, ejecuta:
+
+streamlit run app_demo_agenda_tecnica.py
+
+6) Criterio del reporte:
+- inicio_agendado = fecha seleccionada
+- tipo_trabajo_op = INSTALACION
+- ehumano_promotor = EH de tus socios configurados
+
+7) Resultado en pantalla:
+- resumen por socio
+- detalle por código, nodo, cliente, teléfono, turno, contratista y técnico
+- mensaje general para WhatsApp
+- mensaje individual por socio
+- socios sin instalaciones
+- descarga de Excel
