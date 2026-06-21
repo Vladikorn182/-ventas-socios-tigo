@@ -1,23 +1,61 @@
-AGENDA TÉCNICA / INSTALACIONES DE HOY
+AUTOGESTION TIGO - AGENDA TECNICA
+
+Este ZIP contiene el modulo de Agenda Tecnica, pero NO contiene tu sistema completo anterior
+(dashboard, whatsapp, pendientes_inst, pendientes_pago, suspendidas, objetivos_configuracion),
+porque esos archivos reales no fueron adjuntados en esta conversacion.
+
+CONTENIDO:
+
+1) MODULO_PARA_TU_SISTEMA/agenda_tecnica.py
+   Este es el modulo que debes copiar dentro de tu proyecto actual, en la misma carpeta donde esta app.py.
+
+   En tu app.py actual agrega:
+
+       from agenda_tecnica import mostrar_agenda_tecnica
+
+   Y en tu menu agrega la opcion:
+
+       if opcion == "agenda tecnica":
+           mostrar_agenda_tecnica()
+
+   Si tu menu usa una lista, agrega:
+
+       "agenda tecnica"
+
+2) APP_INDEPENDIENTE_AGENDA/app.py
+   Esta es una app independiente solo para probar Agenda Tecnica.
+   No reemplaza tu sistema completo.
+
+COMO USAR EL MODULO:
+
+- Sube el Excel diario BO-CITA SERVICIO NACIONAL.xlsx dentro del modulo.
+- El sistema filtra automaticamente:
+  * Tipo trabajo: INSTALACION
+  * Fecha seleccionada
+  * EH de tus socios
+
+REQUISITOS:
+
+En requirements.txt de tu sistema deben existir:
+
+streamlit
+pandas
+openpyxl
+xlsxwriter
 
 IMPORTANTE:
-1. Este ZIP es una aplicación independiente de prueba.
-2. No reemplaza ni engloba el sistema anterior de autogestión.
-3. Para probarlo en Render o local, el archivo principal es app.py.
-4. Dentro de la aplicación NO debes subir este ZIP. Debes subir el Excel diario: BO-CITA SERVICIO NACIONAL.xlsx.
 
-ARCHIVOS INCLUIDOS:
-- app.py
-- agenda_tecnica_v2.py
-- requirements.txt
+No reemplaces todo tu sistema con APP_INDEPENDIENTE_AGENDA si quieres conservar dashboard,
+whatsapp, pendientes, suspendidas y objetivos.
 
-PRUEBA LOCAL:
-1. Descomprimir el ZIP.
-2. Abrir terminal en la carpeta.
-3. Ejecutar:
-   streamlit run app.py
-4. En la app, subir el archivo BO-CITA SERVICIO NACIONAL.xlsx.
+Para devolverte el ZIP completo ya integrado, sube tu proyecto completo real desde GitHub,
+o adjunta estos archivos reales:
 
-INTEGRACIÓN CON TU SISTEMA ANTERIOR:
-Para integrarlo en tu app anterior necesito el app.py actual y los módulos actuales.
-Sin esos archivos no debo reemplazar el sistema completo porque puedo borrar módulos como Ranking, Pendientes, Suspendidas, etc.
+app.py
+requirements.txt
+dashboard.py
+whatsapp.py
+pendientes_inst.py
+pendientes_pago.py
+suspendidas.py
+objetivos_configuracion.py
