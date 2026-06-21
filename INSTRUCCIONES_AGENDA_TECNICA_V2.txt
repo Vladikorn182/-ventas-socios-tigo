@@ -1,0 +1,32 @@
+AGENDA TÉCNICA V2 - INSTALACIONES DE HOY
+
+ARCHIVOS:
+- agenda_tecnica_v2.py
+- app_agenda_tecnica_v2.py
+- requirements_agenda_tecnica.txt
+
+PRUEBA INDEPENDIENTE:
+1) Copia agenda_tecnica_v2.py y app_agenda_tecnica_v2.py en la misma carpeta.
+2) Ejecuta:
+   streamlit run app_agenda_tecnica_v2.py
+3) Sube el archivo BO-CITA SERVICIO NACIONAL.xlsx.
+
+CORRECCIÓN PRINCIPAL:
+La versión anterior usaba la fecha actual del sistema. Si el archivo era del 20/06 y hoy es 21/06, salía vacío.
+Esta versión detecta las fechas dentro del archivo y selecciona automáticamente la última fecha encontrada cuando la fecha de hoy no existe en el archivo.
+
+INTEGRACIÓN A TU APP ACTUAL:
+1) Copia agenda_tecnica_v2.py en la carpeta donde está app.py.
+2) En app.py agrega:
+   from agenda_tecnica_v2 import mostrar_agenda_tecnica
+3) En el menú agrega la opción:
+   Agenda Técnica
+4) Donde llamas los módulos agrega:
+   if opcion == "Agenda Técnica":
+       mostrar_agenda_tecnica()
+
+REQUISITOS:
+Asegúrate de tener openpyxl en requirements.txt:
+streamlit
+pandas
+openpyxl
