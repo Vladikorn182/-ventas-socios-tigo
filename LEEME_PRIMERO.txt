@@ -1,0 +1,23 @@
+AGENDA TÉCNICA / INSTALACIONES DE HOY
+
+IMPORTANTE:
+1. Este ZIP es una aplicación independiente de prueba.
+2. No reemplaza ni engloba el sistema anterior de autogestión.
+3. Para probarlo en Render o local, el archivo principal es app.py.
+4. Dentro de la aplicación NO debes subir este ZIP. Debes subir el Excel diario: BO-CITA SERVICIO NACIONAL.xlsx.
+
+ARCHIVOS INCLUIDOS:
+- app.py
+- agenda_tecnica_v2.py
+- requirements.txt
+
+PRUEBA LOCAL:
+1. Descomprimir el ZIP.
+2. Abrir terminal en la carpeta.
+3. Ejecutar:
+   streamlit run app.py
+4. En la app, subir el archivo BO-CITA SERVICIO NACIONAL.xlsx.
+
+INTEGRACIÓN CON TU SISTEMA ANTERIOR:
+Para integrarlo en tu app anterior necesito el app.py actual y los módulos actuales.
+Sin esos archivos no debo reemplazar el sistema completo porque puedo borrar módulos como Ranking, Pendientes, Suspendidas, etc.
