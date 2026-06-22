@@ -1,0 +1,39 @@
+PARCHE - PENDIENTES DE INSTALACION ANTIGUOS +3 DIAS
+
+El ZIP que se subio no incluye pendientes_inst.py, por eso este paquete es un parche para integrar.
+
+Archivos:
+- bloque_instalaciones_antiguas.py
+
+Como integrarlo:
+
+1) Copiar bloque_instalaciones_antiguas.py en la misma carpeta donde esta tu app.py y pendientes_inst.py.
+
+2) Abrir pendientes_inst.py.
+
+3) Arriba, junto a los imports, agregar:
+
+from bloque_instalaciones_antiguas import mostrar_instalaciones_antiguas
+
+4) Despues de que el modulo lea el archivo y cree el DataFrame principal df, agregar:
+
+mostrar_instalaciones_antiguas(df)
+
+5) Guardar y subir a Streamlit Cloud / GitHub.
+
+Funcion:
+- Usa FECHA_GENERACION_OT, si existe.
+- Si no existe, intenta FECHA_REPORTE u otras columnas similares.
+- Muestra codigo cliente, nodo y fecha.
+- Genera mensaje global para WhatsApp.
+- Exporta Excel.
+
+Para que yo lo integre directamente y te devuelva el sistema completo, sube el ZIP real que contenga:
+app.py
+requirements.txt
+dashboard.py
+whatsapp.py
+pendientes_inst.py
+pendientes_pago.py
+suspendidas.py
+objetivos_configuracion.py
