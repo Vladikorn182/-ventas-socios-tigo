@@ -1,0 +1,26 @@
+CORRECCIÓN ERROR STREAMLIT - MÓDULO SUSPENDIDAS
+
+El error mostrado corresponde a la navegación multipágina de Streamlit, no al filtro de suspendidas.
+
+Causa más probable:
+Se copió la carpeta pages/04_suspendidas.py dentro de un proyecto que ya tenía una página llamada suspendidas.
+Streamlit detecta páginas duplicadas y la app se cae antes de cargar.
+
+Forma segura de instalar:
+1. NO copies ninguna carpeta pages de este ZIP.
+2. Copia únicamente el archivo suspendidas.py en la carpeta principal de tu proyecto.
+3. Si ya existe suspendidas.py, reemplázalo.
+4. Mantén tu archivo de página actual en pages, si ya existe.
+5. Si tu página actual no llama al módulo, en la página de suspendidas usa:
+
+from suspendidas import mostrar_suspendidas
+mostrar_suspendidas()
+
+6. Sube cambios a GitHub y reinicia la app en Streamlit Cloud.
+
+Si tienes dos archivos similares dentro de pages, elimina uno:
+- pages/suspendidas.py
+- pages/04_suspendidas.py
+- pages/05_suspendidas.py
+
+Debe quedar solo una página de suspendidas.
