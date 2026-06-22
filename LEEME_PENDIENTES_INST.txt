@@ -1,0 +1,19 @@
+Módulo reconstruido: pendientes_inst.py
+
+Incluye:
+- Carga de CSV/XLSX PENDIENTE_INST_CON_PAGO.
+- Filtro de instalaciones antiguas +3 días.
+- Resultado: Código cliente, Nodo, Fecha, Días, EH, Socio y Tipo venta.
+- Mensaje WhatsApp global.
+- Mensaje agrupado por socio.
+- Descarga Excel.
+
+Cómo usar:
+1) Si tu sistema usa archivo en raíz, reemplaza/agrega: pendientes_inst.py
+2) Si tu sistema usa carpeta pages/, copia: pages/03_pendientes_inst.py
+3) Si tu app importa el módulo, puede llamar:
+   from pendientes_inst import mostrar_pendientes_inst
+   mostrar_pendientes_inst()
+
+Nota:
+Este módulo no reemplaza dashboard, whatsapp, suspendidas ni objetivos.
