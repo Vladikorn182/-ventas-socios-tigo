@@ -1,0 +1,21 @@
+AUTOGESTIÓN TIGO - APP LIMPIA EN CARPETA
+
+Objetivo:
+Evitar borrar carpetas antiguas del repositorio. Esta versión se ejecuta desde:
+
+APP_LIMPIA/app.py
+
+Pasos:
+1. Descomprime este ZIP en tu computadora.
+2. En GitHub, presiona Add file > Upload files.
+3. Arrastra la carpeta APP_LIMPIA completa al repositorio.
+4. También arrastra requirements.txt si GitHub te permite reemplazarlo.
+5. Presiona Commit changes.
+6. En Streamlit Cloud entra a Manage app > Settings.
+7. Cambia Main file path a:
+
+APP_LIMPIA/app.py
+
+8. Guarda y presiona Reboot app.
+
+No necesitas borrar folders antiguos como pages, modulos, APP_INDEPENDIENTE_AGENDA, etc.
