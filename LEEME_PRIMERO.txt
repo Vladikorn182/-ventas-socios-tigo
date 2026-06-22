@@ -1,71 +1,42 @@
-AUTOGESTION TIGO - AGENDA TECNICA
+AUTOGESTIÓN TIGO - ZIP INTEGRADO FINAL
 
-Este ZIP contiene el modulo de Agenda Tecnica, pero NO contiene tu sistema completo anterior
-(dashboard, whatsapp, pendientes_inst, pendientes_pago, suspendidas, objetivos_configuracion),
-porque esos archivos reales no fueron adjuntados en esta conversacion.
+Este paquete contiene una versión limpia en un solo proyecto Streamlit.
 
-CONTENIDO:
+ARCHIVOS INCLUIDOS:
+- app.py
+- agenda_tecnica.py
+- pendientes_inst.py
+- suspendidas.py
+- requirements.txt
 
-1) MODULO_PARA_TU_SISTEMA/agenda_tecnica.py
-   Este es el modulo que debes copiar dentro de tu proyecto actual, en la misma carpeta donde esta app.py.
+MÓDULOS INCLUIDOS:
+1) Agenda Técnica
+   - Carga BO-CITA SERVICIO NACIONAL.
+   - Filtra instalaciones por fecha y EH.
+   - Genera mensaje global para WhatsApp del grupo.
 
-   En tu app.py actual agrega:
+2) Pendientes de Instalación con Pago
+   - Carga PENDIENTE_INST_CON_PAGO.
+   - Filtra casos antiguos de +3 días.
+   - Muestra código, nodo, fecha, días, EH y socio.
+   - Genera mensaje WhatsApp global.
 
-       from agenda_tecnica import mostrar_agenda_tecnica
+3) Suspendidas
+   - Carga archivo de suspendidas.
+   - Filtra casos antiguos de +3 días.
+   - Clasifica observación CRM.
+   - Genera mensaje WhatsApp global.
 
-   Y en tu menu agrega la opcion:
+IMPORTANTE PARA EVITAR EL ERROR DE STREAMLIT:
+- No copies carpetas pages/ anteriores dentro de este proyecto.
+- Si tu repositorio ya tiene pages/03_pendientes_inst.py o pages/04_suspendidas.py, elimínalas antes de subir este ZIP.
+- Debe quedar un solo app.py y los tres módulos en la carpeta principal.
 
-       if opcion == "agenda tecnica":
-           mostrar_agenda_tecnica()
+PASOS PARA SUBIR A GITHUB / STREAMLIT CLOUD:
+1) Descomprime este ZIP.
+2) Reemplaza en tu repositorio los archivos por estos cinco archivos.
+3) Elimina cualquier carpeta pages/ vieja si causa duplicados.
+4) Sube cambios a GitHub.
+5) Reinicia la app en Streamlit Cloud.
 
-   Si tu menu usa una lista, agrega:
-
-       "agenda tecnica"
-
-2) APP_INDEPENDIENTE_AGENDA/app.py
-   Esta es una app independiente solo para probar Agenda Tecnica.
-   No reemplaza tu sistema completo.
-
-COMO USAR EL MODULO:
-
-- Sube el Excel diario BO-CITA SERVICIO NACIONAL.xlsx dentro del modulo.
-- El sistema filtra automaticamente:
-  * Tipo trabajo: INSTALACION
-  * Fecha seleccionada
-  * EH de tus socios
-
-REQUISITOS:
-
-En requirements.txt de tu sistema deben existir:
-
-streamlit
-pandas
-openpyxl
-xlsxwriter
-
-IMPORTANTE:
-
-No reemplaces todo tu sistema con APP_INDEPENDIENTE_AGENDA si quieres conservar dashboard,
-whatsapp, pendientes, suspendidas y objetivos.
-
-Para devolverte el ZIP completo ya integrado, sube tu proyecto completo real desde GitHub,
-o adjunta estos archivos reales:
-
-app.py
-requirements.txt
-dashboard.py
-whatsapp.py
-pendientes_inst.py
-pendientes_pago.py
-suspendidas.py
-objetivos_configuracion.py
-
-
-ACTUALIZACIÓN WHATSAPP AMIGABLE:
-- Mensaje general con encabezado claro, fecha, total, socios con agenda y ranking con emojis.
-- Mensaje individual por socio con código, cliente, nodo, turno y referencia.
-- Formato optimizado para copiar y pegar en WhatsApp.
-
-
-ACTUALIZACIÓN FORMATO CORTO WHATSAPP:
-El mensaje individual por socio ahora muestra: Fecha, Socio, EH, Total y clientes en línea corta: Código | Nodo | Turno.
+Si quieres conservar dashboard, whatsapp, pendientes_pago u objetivos_configuracion, debes subir esos archivos reales para integrarlos también. Este ZIP solo incluye los módulos que enviaste y que se pudieron validar.
