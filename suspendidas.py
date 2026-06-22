@@ -1,0 +1,514 @@
+# suspendidas.py
+# Módulo: Suspendidas
+# Incluye filtro de suspendidas antiguas (+3 días), clasificación CRM y mensaje WhatsApp global.
+
+from __future__ import annotations
+
+import re
+import unicodedata
+from datetime import date, datetime
+from io import BytesIO
+from urllib.parse import quote
+
+import pandas as pd
+
+try:
+    from zoneinfo import ZoneInfo
+except Exception:  # pragma: no cover
+    ZoneInfo = None
+
+
+SOCIOS_EH_DEFAULT = {
+    "59509": "Adriana Paola Villafuerte Guerra",
+    "63483": "Franklin Ramiro Quispe Rosas",
+    "89859": "José Pablo Fernández Puente",
+    "88463": "Alicia Graciela Zamora Buezo",
+    "88426": "Sonia Noemí Mayta",
+    "58984": "María Surco Aruquipa",
+    "78099": "Geovana Carla Siñani Luna",
+    "78340": "Olivia Sánchez Quispe",
+    "89326": "Palmira Selaes Herrera",
+    "83457": "Estrella Belén Quispe Flores",
+    "89231": "Alex Rudy Mamani Guarachi",
+    "72210": "Guadalupe Apaza Vila",
+    "67755": "Sandro Iván Copa Velasco",
+    "86737": "Anahi Oinca",
+    "86963": "Teresa Eugenia Chipana Mamani De Sayes",
+    "79030": "Víctor Hugo Chambilla Flores",
+    "88874": "Gustavo Callejas Mamani",
+    "77735": "Claudia Michme Ajno",
+    "87933": "Pamela Mery Rojas Alarcón",
+    "78272": "My Phone SRL",
+}
+
+
+def hoy_bolivia() -> date:
+    if ZoneInfo is None:
+        return date.today()
+    return datetime.now(ZoneInfo("America/La_Paz")).date()
+
+
+def sin_tildes(texto: object) -> str:
+    if texto is None or pd.isna(texto):
+        return ""
+    txt = str(texto)
+    return "".join(c for c in unicodedata.normalize("NFKD", txt) if not unicodedata.combining(c))
+
+
+def normalizar_columna(columna: object) -> str:
+    texto = sin_tildes(columna).strip().lower()
+    reemplazos = {
+        " ": "_", "-": "_", "/": "_", ".": "_", "(": "", ")": "", "#": "",
+    }
+    for origen, destino in reemplazos.items():
+        texto = texto.replace(origen, destino)
+    texto = re.sub(r"_+", "_", texto)
+    return texto.strip("_")
+
+
+def normalizar_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df.columns = [normalizar_columna(c) for c in df.columns]
+    return df
+
+
+def buscar_columna(df: pd.DataFrame, opciones: list[str]) -> str | None:
+    columnas = set(df.columns)
+    for opcion in opciones:
+        opcion_norm = normalizar_columna(opcion)
+        if opcion_norm in columnas:
+            return opcion_norm
+    return None
+
+
+def obtener_serie(df: pd.DataFrame, opciones: list[str]) -> pd.Series:
+    columna = buscar_columna(df, opciones)
+    if columna is None:
+        return pd.Series([""] * len(df), index=df.index)
+    return df[columna]
+
+
+def limpiar_texto(valor: object) -> str:
+    if valor is None or pd.isna(valor):
+        return ""
+    return str(valor).strip()
+
+
+def limpiar_codigo(valor: object) -> str:
+    if valor is None or pd.isna(valor):
+        return ""
+    texto = str(valor).strip()
+    if texto.endswith(".0"):
+        texto = texto[:-2]
+    return re.sub(r"[^0-9A-Za-z-]", "", texto)
+
+
+def limpiar_eh(valor: object) -> str:
+    if valor is None or pd.isna(valor):
+        return ""
+    texto = str(valor).strip()
+    if texto.endswith(".0"):
+        texto = texto[:-2]
+    return re.sub(r"\D", "", texto)
+
+
+def parsear_fecha(serie: pd.Series) -> pd.Series:
+    fecha = pd.to_datetime(serie, errors="coerce", dayfirst=True)
+    return fecha.dt.date
+
+
+def leer_archivo(archivo) -> pd.DataFrame:
+    nombre = getattr(archivo, "name", "").lower()
+    if nombre.endswith(".csv"):
+        return pd.read_csv(archivo, sep=None, engine="python")
+    return pd.read_excel(archivo, engine="openpyxl")
+
+
+def construir_socios(texto_extra: str = "") -> dict[str, str]:
+    socios = dict(SOCIOS_EH_DEFAULT)
+    for linea in str(texto_extra).splitlines():
+        linea = linea.strip()
+        if not linea:
+            continue
+        match = re.match(r"^(\d{3,8})\s*[-|,;:]?\s*(.+)$", linea)
+        if match:
+            socios[match.group(1)] = match.group(2).strip()
+    return socios
+
+
+def clasificar_observacion(observacion: object) -> str:
+    txt = sin_tildes(observacion).upper().strip()
+    if not txt:
+        return "Sin CRM/observación"
+
+    reglas = [
+        ("TAP saturado", ["TAP", "SATUR"]),
+        ("Volver a llamar", ["VOLVER A LLAMAR", "VOLVER", "LLAMAR LUEGO", "LLAMAR MAS TARDE"]),
+        ("Sin contacto", ["NO CONTESTA", "NO RESPONDE", "SIN CONTACTO", "NO CONTESTO", "NO ATIEND", "APAGADO"]),
+        ("Cliente ausente", ["CLIENTE AUSENTE", "NO SE ENCUENTRA", "NO ESTA", "AUSENTE", "NO HABIA"]),
+        ("Reagendar", ["REAGEND", "REPROGRAM", "AGENDA", "AGENDAR"]),
+        ("Bloqueo/acceso", ["BLOQUEO", "PARO", "TRANSITO", "ACCESO", "NO HAY PASO", "MOVILIDAD"]),
+        ("Validar dirección", ["DIRECCION", "DOMICILIO", "REFERENCIA", "UBICACION", "ZONA", "NO UBICA"]),
+        ("Cliente desiste", ["DESIST", "ANULA", "ANUL", "NO QUIERE", "CANCELO", "CANCELA"]),
+        ("Pago/deuda", ["PAGO", "DEUDA", "MORA", "COBRANZA", "PENDIENTE DE PAGO"]),
+        ("Pendiente técnico", ["TECNICO", "CONTRATISTA", "MATERIAL", "SEÑAL", "SENAL", "NAP", "FACTIBILIDAD"]),
+    ]
+
+    for categoria, claves in reglas:
+        if any(clave in txt for clave in claves):
+            return categoria
+    return "Revisar observación"
+
+
+def preparar_suspendidas(df_original: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, str | None]]:
+    df = normalizar_dataframe(df_original)
+
+    col_codigo = buscar_columna(df, [
+        "CLIENTE_NRO", "CODIGO_CLIENTE", "COD_CLIENTE", "CODIGO", "COD", "CLIENTE",
+    ])
+    col_nodo = buscar_columna(df, [
+        "NODO_NOMBRE", "NODO", "NODO_ACTUAL", "NODO RED", "NODO_RED",
+    ])
+    col_fecha_reporte = buscar_columna(df, [
+        "FECHA_REPORTE", "FECHA REPORTE", "FECHA_CARGA", "FECHA", "FECHA_SUSPENDIDA", "FECHA_ESTADO",
+    ])
+    col_fecha_ot = buscar_columna(df, [
+        "FECHA_GENERACION_OT", "FECHA GENERACION OT", "FECHA_OT", "FECHA_VENTA", "FECHA_GENERACION",
+    ])
+    col_eh = buscar_columna(df, [
+        "VENDEDOR_EH", "EH", "CODIGO_EH", "EHUMANO", "EH_PROMOTOR", "EJECUTIVO_EH",
+    ])
+    col_socio = buscar_columna(df, [
+        "VENDEDOR_NOMBRE", "NOMBRE_VENDEDOR", "SOCIO", "VENDEDOR", "NOMBRE_SOCIO",
+    ])
+    col_tipo = buscar_columna(df, [
+        "TIPO_VENTA", "TIPO", "TIPO_VTA", "TIPO_OPERACION",
+    ])
+    col_cliente = buscar_columna(df, [
+        "CLIENTE_NOMBRE", "NOMBRE_CLIENTE", "CLIENTE", "NOMBRE",
+    ])
+    col_tel1 = buscar_columna(df, [
+        "CLIENTE_TELEFONO1", "TELEFONO1", "TEL1", "TELEFONO", "CELULAR",
+    ])
+    col_tel2 = buscar_columna(df, [
+        "CLIENTE_TELEFONO2", "TELEFONO2", "TEL2", "REFERENCIA", "REF",
+    ])
+    col_obs = buscar_columna(df, [
+        "CRM_OBSERVACION", "OBSERVACION", "OBS", "COMENTARIO", "COMENTARIOS", "MOTIVO", "MOTIVO_SUSPENSION",
+    ])
+    col_estado = buscar_columna(df, [
+        "ESTADO", "ESTADO_OT", "ESTADO_ACTUAL", "ESTADO_TRABAJO",
+    ])
+
+    columnas = {
+        "codigo": col_codigo,
+        "nodo": col_nodo,
+        "fecha_reporte": col_fecha_reporte,
+        "fecha_generacion_ot": col_fecha_ot,
+        "eh": col_eh,
+        "socio": col_socio,
+        "tipo_venta": col_tipo,
+        "cliente": col_cliente,
+        "telefono1": col_tel1,
+        "telefono2": col_tel2,
+        "observacion": col_obs,
+        "estado": col_estado,
+    }
+
+    faltantes = [k for k in ["codigo", "nodo"] if columnas[k] is None]
+    if faltantes:
+        raise ValueError(
+            "No se encontraron columnas obligatorias: "
+            + ", ".join(faltantes)
+            + ". Columnas encontradas: "
+            + ", ".join(df.columns[:80])
+        )
+
+    df["_codigo"] = df[col_codigo].apply(limpiar_codigo) if col_codigo else ""
+    df["_nodo"] = df[col_nodo].apply(limpiar_texto).str.upper() if col_nodo else ""
+    df["_eh"] = df[col_eh].apply(limpiar_eh) if col_eh else ""
+    df["_socio"] = df[col_socio].apply(limpiar_texto) if col_socio else ""
+    df["_tipo_venta"] = df[col_tipo].apply(limpiar_texto).str.upper() if col_tipo else ""
+    df["_cliente"] = df[col_cliente].apply(limpiar_texto) if col_cliente else ""
+    df["_telefono1"] = df[col_tel1].apply(limpiar_texto) if col_tel1 else ""
+    df["_telefono2"] = df[col_tel2].apply(limpiar_texto) if col_tel2 else ""
+    df["_observacion"] = df[col_obs].apply(limpiar_texto) if col_obs else ""
+    df["_estado"] = df[col_estado].apply(limpiar_texto) if col_estado else ""
+    df["_categoria"] = df["_observacion"].apply(clasificar_observacion)
+
+    if col_fecha_reporte:
+        df["_fecha_base"] = parsear_fecha(df[col_fecha_reporte])
+        columnas["fecha_base_usada"] = col_fecha_reporte
+    elif col_fecha_ot:
+        df["_fecha_base"] = parsear_fecha(df[col_fecha_ot])
+        columnas["fecha_base_usada"] = col_fecha_ot
+    else:
+        df["_fecha_base"] = pd.NaT
+        columnas["fecha_base_usada"] = None
+
+    return df, columnas
+
+
+def calcular_suspendidas_antiguas(
+    df_original: pd.DataFrame,
+    dias_antiguedad: int,
+    fecha_hoy: date,
+    solo_eh_configurados: bool,
+    socios: dict[str, str],
+    tipo_venta: str = "Todos",
+    categoria: str = "Todas",
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict]:
+    df, columnas = preparar_suspendidas(df_original)
+
+    fecha_corte = fecha_hoy - pd.Timedelta(days=int(dias_antiguedad))
+
+    mask_codigo = df["_codigo"].ne("")
+    mask_fecha = pd.Series([True] * len(df), index=df.index)
+    if columnas.get("fecha_base_usada"):
+        mask_fecha = df["_fecha_base"].notna() & (df["_fecha_base"] <= fecha_corte)
+
+    mask_eh = pd.Series([True] * len(df), index=df.index)
+    if solo_eh_configurados:
+        mask_eh = df["_eh"].isin(socios.keys())
+
+    mask_tipo = pd.Series([True] * len(df), index=df.index)
+    if tipo_venta != "Todos":
+        mask_tipo = df["_tipo_venta"].str.contains(tipo_venta.upper(), na=False)
+
+    mask_categoria = pd.Series([True] * len(df), index=df.index)
+    if categoria != "Todas":
+        mask_categoria = df["_categoria"].eq(categoria)
+
+    suspendidas = df[mask_codigo & mask_fecha & mask_eh & mask_tipo & mask_categoria].copy()
+
+    if suspendidas.empty:
+        detalle = pd.DataFrame(columns=[
+            "Código cliente", "Nodo", "Fecha", "Días", "EH", "Socio", "Tipo venta",
+            "Categoría", "Cliente", "Teléfono 1", "Teléfono 2", "Estado", "Observación",
+        ])
+    else:
+        detalle = pd.DataFrame({
+            "Código cliente": suspendidas["_codigo"],
+            "Nodo": suspendidas["_nodo"],
+            "Fecha": suspendidas["_fecha_base"],
+            "Días": suspendidas["_fecha_base"].apply(
+                lambda f: (fecha_hoy - f).days if pd.notna(f) else ""
+            ),
+            "EH": suspendidas["_eh"],
+            "Socio": suspendidas.apply(
+                lambda r: r["_socio"] or socios.get(r["_eh"], "SIN NOMBRE CONFIGURADO"), axis=1
+            ),
+            "Tipo venta": suspendidas["_tipo_venta"],
+            "Categoría": suspendidas["_categoria"],
+            "Cliente": suspendidas["_cliente"],
+            "Teléfono 1": suspendidas["_telefono1"],
+            "Teléfono 2": suspendidas["_telefono2"],
+            "Estado": suspendidas["_estado"],
+            "Observación": suspendidas["_observacion"],
+        })
+        detalle = detalle.sort_values(["Días", "Socio", "Código cliente"], ascending=[False, True, True]).reset_index(drop=True)
+
+    if detalle.empty:
+        resumen = pd.DataFrame(columns=["EH", "Socio", "Suspendidas"])
+        resumen_categoria = pd.DataFrame(columns=["Categoría", "Cantidad"])
+    else:
+        resumen = (
+            detalle.groupby(["EH", "Socio"], as_index=False)["Código cliente"]
+            .count()
+            .rename(columns={"Código cliente": "Suspendidas"})
+            .sort_values("Suspendidas", ascending=False)
+            .reset_index(drop=True)
+        )
+        resumen_categoria = (
+            detalle.groupby("Categoría", as_index=False)["Código cliente"]
+            .count()
+            .rename(columns={"Código cliente": "Cantidad"})
+            .sort_values("Cantidad", ascending=False)
+            .reset_index(drop=True)
+        )
+
+    diagnostico = {
+        "total_filas": len(df),
+        "total_suspendidas_antiguas": len(detalle),
+        "fecha_corte": fecha_corte,
+        "columnas_detectadas": columnas,
+        "categorias": sorted(df["_categoria"].dropna().unique().tolist()),
+        "tipos_venta": sorted([x for x in df["_tipo_venta"].dropna().unique().tolist() if str(x).strip()]),
+    }
+
+    return resumen, resumen_categoria, detalle, diagnostico
+
+
+def mensaje_global_suspendidas(detalle: pd.DataFrame, fecha_hoy: date, dias_antiguedad: int) -> str:
+    fecha_txt = fecha_hoy.strftime("%d/%m/%Y")
+    total = len(detalle)
+    lineas = [
+        "🚨 *SUSPENDIDAS ANTIGUAS +3 DÍAS*" if dias_antiguedad == 3 else f"🚨 *SUSPENDIDAS ANTIGUAS +{dias_antiguedad} DÍAS*",
+        f"📅 Corte: *{fecha_txt}*",
+        f"📌 Total casos: *{total}*",
+        "",
+    ]
+
+    if detalle.empty:
+        lineas += [
+            "✅ No se encontraron suspendidas antiguas con los filtros seleccionados.",
+        ]
+        return "\n".join(lineas)
+
+    lineas.append("📋 *Detalle por socio:*")
+    for (eh, socio), grupo in detalle.groupby(["EH", "Socio"], sort=False):
+        lineas += [
+            "",
+            f"👤 *{socio}*",
+            f"🆔 EH: *{eh or 'S/D'}* | 🚨 *{len(grupo)}* casos",
+        ]
+        for i, (_, r) in enumerate(grupo.iterrows(), start=1):
+            codigo = r.get("Código cliente", "") or "S/D"
+            nodo = r.get("Nodo", "") or "S/D"
+            dias = r.get("Días", "") or ""
+            categoria = r.get("Categoría", "") or "Revisar"
+            lineas.append(f"{i}. {codigo} | {nodo} | {dias} días | {categoria}")
+
+    lineas += [
+        "",
+        "✅ Favor revisar, contactar al cliente y reportar el avance o motivo de suspensión.",
+    ]
+    return "\n".join(lineas)
+
+
+def mensaje_resumen_categorias(resumen_categoria: pd.DataFrame, fecha_hoy: date) -> str:
+    fecha_txt = fecha_hoy.strftime("%d/%m/%Y")
+    lineas = [
+        "📊 *RESUMEN SUSPENDIDAS POR MOTIVO*",
+        f"📅 Corte: *{fecha_txt}*",
+        "",
+    ]
+    if resumen_categoria.empty:
+        lineas.append("Sin casos para los filtros seleccionados.")
+        return "\n".join(lineas)
+    for _, r in resumen_categoria.iterrows():
+        lineas.append(f"🔹 {r['Categoría']}: *{int(r['Cantidad'])}*")
+    return "\n".join(lineas)
+
+
+def generar_excel(resumen: pd.DataFrame, resumen_categoria: pd.DataFrame, detalle: pd.DataFrame, diagnostico: dict) -> BytesIO:
+    salida = BytesIO()
+    with pd.ExcelWriter(salida, engine="openpyxl") as writer:
+        resumen.to_excel(writer, index=False, sheet_name="Resumen por socio")
+        resumen_categoria.to_excel(writer, index=False, sheet_name="Resumen categoria")
+        detalle.to_excel(writer, index=False, sheet_name="Detalle")
+        pd.DataFrame({
+            "Métrica": ["Total filas", "Suspendidas antiguas", "Fecha corte"],
+            "Valor": [diagnostico["total_filas"], diagnostico["total_suspendidas_antiguas"], diagnostico["fecha_corte"]],
+        }).to_excel(writer, index=False, sheet_name="Diagnostico")
+        for hoja in writer.book.worksheets:
+            hoja.freeze_panes = "A2"
+            for col in hoja.columns:
+                letra = col[0].column_letter
+                ancho = max(len(str(c.value)) if c.value is not None else 0 for c in col)
+                hoja.column_dimensions[letra].width = min(max(ancho + 2, 10), 50)
+    salida.seek(0)
+    return salida
+
+
+def whatsapp_link(texto: str) -> str:
+    return "https://wa.me/?text=" + quote(texto)
+
+
+def mostrar_suspendidas():
+    import streamlit as st
+
+    st.title("🚨 Suspendidas")
+    st.caption("Carga el archivo diario de suspendidas. El módulo filtra casos antiguos, clasifica la observación CRM y genera mensaje para WhatsApp.")
+
+    with st.sidebar:
+        st.subheader("Filtros Suspendidas")
+        dias_antiguedad = st.number_input("Antigüedad mínima en días", min_value=1, max_value=30, value=3, step=1)
+        fecha_hoy = st.date_input("Fecha de corte", value=hoy_bolivia(), format="DD/MM/YYYY")
+        solo_eh_configurados = st.checkbox("Solo mis socios EH", value=True)
+        tipo_venta = st.selectbox("Tipo de venta", ["Todos", "GROSSADD", "CROSS_SELLING"])
+        with st.expander("Agregar o corregir EH", expanded=False):
+            extra_eh = st.text_area("Formato: 59509 Nombre del socio", height=120)
+        socios = construir_socios(extra_eh)
+
+    archivo = st.file_uploader("📤 Sube archivo Suspendidas", type=["csv", "xlsx", "xls"])
+    if archivo is None:
+        st.info("Sube el archivo de suspendidas para generar el reporte.")
+        return
+
+    try:
+        df_original = leer_archivo(archivo)
+    except Exception as exc:
+        st.error(f"No se pudo leer el archivo: {exc}")
+        return
+
+    try:
+        df_preparado, _ = preparar_suspendidas(df_original)
+        categorias = ["Todas"] + sorted(df_preparado["_categoria"].dropna().unique().tolist())
+    except Exception as exc:
+        st.error(str(exc))
+        st.write("Columnas detectadas:")
+        st.write(list(normalizar_dataframe(df_original).columns))
+        st.dataframe(df_original.head(10), use_container_width=True)
+        return
+
+    categoria = st.selectbox("Filtrar por categoría CRM", categorias)
+
+    resumen, resumen_categoria, detalle, diagnostico = calcular_suspendidas_antiguas(
+        df_original=df_original,
+        dias_antiguedad=int(dias_antiguedad),
+        fecha_hoy=fecha_hoy,
+        solo_eh_configurados=solo_eh_configurados,
+        socios=socios,
+        tipo_venta=tipo_venta,
+        categoria=categoria,
+    )
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Suspendidas antiguas", len(detalle))
+    c2.metric("Socios con casos", resumen["EH"].nunique() if not resumen.empty else 0)
+    c3.metric("Categorías", resumen_categoria["Categoría"].nunique() if not resumen_categoria.empty else 0)
+
+    with st.expander("Diagnóstico del archivo", expanded=False):
+        st.write("Columnas detectadas:", diagnostico["columnas_detectadas"])
+        st.write(f"Total filas: **{diagnostico['total_filas']}**")
+        st.write(f"Fecha corte: **{diagnostico['fecha_corte'].strftime('%d/%m/%Y')}**")
+        st.write("Tipos de venta detectados:", diagnostico["tipos_venta"])
+        st.write("Categorías detectadas:", diagnostico["categorias"])
+
+    st.subheader("📊 Resumen por socio")
+    st.dataframe(resumen, use_container_width=True, hide_index=True)
+
+    st.subheader("📊 Resumen por categoría CRM")
+    st.dataframe(resumen_categoria, use_container_width=True, hide_index=True)
+
+    st.subheader("🚨 Detalle suspendidas antiguas")
+    st.dataframe(detalle, use_container_width=True, hide_index=True)
+
+    st.subheader("📲 Mensaje global WhatsApp")
+    texto = mensaje_global_suspendidas(detalle, fecha_hoy, int(dias_antiguedad))
+    st.text_area("Copiar mensaje global", texto, height=350)
+    st.markdown(f"[Enviar por WhatsApp]({whatsapp_link(texto)})")
+
+    with st.expander("Mensaje resumen por categoría", expanded=False):
+        texto_cat = mensaje_resumen_categorias(resumen_categoria, fecha_hoy)
+        st.text_area("Copiar resumen por categoría", texto_cat, height=180)
+        st.markdown(f"[Enviar resumen por WhatsApp]({whatsapp_link(texto_cat)})")
+
+    excel = generar_excel(resumen, resumen_categoria, detalle, diagnostico)
+    st.download_button(
+        "⬇️ Descargar Excel",
+        data=excel,
+        file_name=f"suspendidas_antiguas_{fecha_hoy.strftime('%Y%m%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+def app():
+    import streamlit as st
+    st.set_page_config(page_title="Suspendidas", page_icon="🚨", layout="wide")
+    mostrar_suspendidas()
+
+
+if __name__ == "__main__":
+    app()

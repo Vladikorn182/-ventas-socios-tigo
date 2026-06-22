@@ -1,0 +1,31 @@
+MÓDULO SUSPENDIDAS
+
+Archivos incluidos:
+- suspendidas.py
+- pages/04_suspendidas.py
+- app_demo_suspendidas.py
+- requirements.txt
+
+OPCIÓN 1 - Integrar en tu sistema actual:
+1. Copia suspendidas.py en la carpeta principal del proyecto.
+2. En app.py importa:
+   from suspendidas import mostrar_suspendidas
+3. En tu menú agrega:
+   if opcion == "suspendidas":
+       mostrar_suspendidas()
+
+OPCIÓN 2 - Si usas carpeta pages de Streamlit:
+1. Copia suspendidas.py en la carpeta principal.
+2. Copia pages/04_suspendidas.py en la carpeta pages.
+
+OPCIÓN 3 - Probar independiente:
+Ejecuta:
+streamlit run app_demo_suspendidas.py
+
+Qué hace:
+- Carga archivo CSV/XLSX de suspendidas.
+- Detecta columnas comunes: CLIENTE_NRO, NODO_NOMBRE, FECHA_REPORTE, VENDEDOR_EH, VENDEDOR_NOMBRE, TIPO_VENTA, CLIENTE_TELEFONO1/2, CRM_OBSERVACION.
+- Filtra suspendidas antiguas desde +3 días hacia atrás.
+- Clasifica CRM_OBSERVACION por motivo.
+- Genera mensaje global para WhatsApp.
+- Exporta Excel.
